@@ -1,0 +1,5 @@
+numpy
+pillow
+pyopengl
+pyopengl-accelerate
+pyopenvr
