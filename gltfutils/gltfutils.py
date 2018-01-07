@@ -16,6 +16,7 @@ import PIL.Image as Image
 _here = os.path.dirname(__file__)
 _logger = logging.getLogger(__name__)
 from gltfutils.gl_rendering import set_matrix_from_quaternion
+import gltfutils.pbrmr as pbrmr
 
 
 CHECK_GL_ERRORS = False
@@ -45,8 +46,12 @@ _ATTRIBUTE_DECL_RE = re.compile(r"attribute\s+(?P<type_spec>\w+)\s+(?P<attribute
 _UNIFORM_DECL_RE =   re.compile(r"uniform\s+(?P<type_spec>\w+)\s+(?P<uniform_name>\w+)\s*(=\s*(?P<initialization>.*)\s*;|;)")
 
 
+class GLTFUException(Exception):
+    pass
+
+
 def setup_shaders(gltf, uri_path):
-    """Loads and compiles all shaders defined or referenced in the given gltf."""
+    """Loads and compiles all shaders defined or referenced in the given gltf"""
     shader_ids = {}
     for shader_name, shader in gltf['shaders'].items():
         uri = shader['uri']
@@ -61,7 +66,7 @@ def setup_shaders(gltf, uri_path):
         gl.glShaderSource(shader_id, shader_str)
         gl.glCompileShader(shader_id)
         if not gl.glGetShaderiv(shader_id, gl.GL_COMPILE_STATUS):
-            raise Exception('failed to compile shader "%s":\n%s' % (shader_name, gl.glGetShaderInfoLog(shader_id).decode()))
+            raise Exception('FAILED to compile shader "%s":\n%s' % (shader_name, gl.glGetShaderInfoLog(shader_id).decode()))
         _logger.debug('compiled shader "%s"', shader_name)
         shader_ids[shader_name] = shader_id
     return shader_ids
@@ -82,6 +87,10 @@ def setup_programs(gltf, shader_ids):
                                           for attribute_name in program['attributes']}
         program['uniform_locations'] = {}
         _logger.debug('linked program "%s"\n  attribute locations: %s', program_name, program['attribute_locations'])
+
+
+def setup_programs_v2(gltf):
+    pbrmr.setup_pbrmr_programs(gltf)
 
 
 def load_images(gltf, uri_path):
@@ -228,7 +237,6 @@ def setup_buffers_v2(gltf, uri_path):
                           filename)
     for i, bufferView in enumerate(gltf.get('bufferViews', [])):
         buffer_id = gl.glGenBuffers(1)
-        #byteLength = bufferView['byteLength']
         byteOffset = bufferView['byteOffset']
         gl.glBindBuffer(bufferView['target'], buffer_id)
         gl.glBufferData(bufferView['target'], bufferView['byteLength'],

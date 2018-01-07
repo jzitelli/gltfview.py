@@ -102,7 +102,7 @@ for unif, define in _GLSL_UNIF_TO_DEFINE.items():
     _DEFINE_TO_GLTF_PBRMR_UNIFS[define].append(unif)
 
 
-def setup_techniques_v2(gltf, uri_path):
+def setup_pbrmr_programs(gltf):
     with open(os.path.join(_here, 'shaders', 'pbr-vert.glsl')) as f:
         vert_src = f.read()
     with open(os.path.join(_here, 'shaders', 'pbr-frag.glsl')) as f:
@@ -118,21 +118,21 @@ def setup_techniques_v2(gltf, uri_path):
     techniques = {}
     for i, (defines, materials) in enumerate(defines_to_materials.items()):
         v_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [vert_src])
-        _logger.debug('vertex shader:\n%s\n', v_src)
+        _logger.debug('compiling vertex shader...:\n%s\n', v_src)
         vert_shader_id = gl.glCreateShader(gl.GL_VERTEX_SHADER)
         gl.glShaderSource(vert_shader_id, v_src)
         gl.glCompileShader(vert_shader_id)
         if not gl.glGetShaderiv(vert_shader_id, gl.GL_COMPILE_STATUS):
-            raise Exception('failed to compile vertex shader %s:\n%s' % (i, gl.glGetShaderInfoLog(vert_shader_id).decode()))
-        _logger.debug('compiled vertex shader %s', vert_shader_id)
+            raise Exception('FAILED to compile vertex shader %s:\n%s' % (i, gl.glGetShaderInfoLog(vert_shader_id).decode()))
+        _logger.debug('..successfully compiled vertex shader %s', vert_shader_id)
         f_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [frag_src])
-        _logger.debug('fragment shader:\n%s', f_src)
+        _logger.debug('compiling fragment shader...:\n%s', f_src)
         frag_shader_id = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
         gl.glShaderSource(frag_shader_id, f_src)
         gl.glCompileShader(frag_shader_id)
         if not gl.glGetShaderiv(frag_shader_id, gl.GL_COMPILE_STATUS):
-            raise Exception('failed to compile fragment shader %s:\n%s' % (i, gl.glGetShaderInfoLog(frag_shader_id).decode()))
-        _logger.debug('compiled fragment shader %s', frag_shader_id)
+            raise Exception('FAILED to compile fragment shader %s:\n%s' % (i, gl.glGetShaderInfoLog(frag_shader_id).decode()))
+        _logger.debug('...successfully compiled fragment shader %s', frag_shader_id)
         program_id = gl.glCreateProgram()
         gl.glAttachShader(program_id, vert_shader_id)
         gl.glAttachShader(program_id, frag_shader_id)
@@ -140,7 +140,7 @@ def setup_techniques_v2(gltf, uri_path):
         gl.glDetachShader(program_id, vert_shader_id)
         gl.glDetachShader(program_id, frag_shader_id)
         if not gl.glGetProgramiv(program_id, gl.GL_LINK_STATUS):
-            raise Exception('failed to link program %s' % i)
+            raise Exception('FAILED to link program %s' % i)
         attributes = copy(_REQUIRED_ATTRIBUTES)
         attributes += list(chain(_DEFINE_TO_GLTF_PBRMR_ATTRS[define]
                                  for define in defines))
