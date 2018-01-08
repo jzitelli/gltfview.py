@@ -3,13 +3,13 @@ from collections import defaultdict
 import time
 import logging
 
+import numpy as np
 import OpenGL
 OpenGL.ERROR_CHECKING = False
 OpenGL.ERROR_LOGGING = False
 OpenGL.ERROR_ON_COPY = True
 import OpenGL.GL as gl
 import cyglfw3 as glfw
-import numpy as np
 
 
 _logger = logging.getLogger(__name__)
@@ -46,14 +46,17 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
         version = asset['version']
         generator = asset.get('generator', generator)
     _logger.info('''
-INITIALIZING FOR GLTF VERSION %s...\nGENERATOR: %s''',
-                     version, generator)
+
+  INITIALIZING FOR GLTF VERSION %s...
+
+    GENERATOR: %s
+''', version, generator)
     if window_size is None:
         window_size = [800, 600]
     window = setup_glfw(width=window_size[0], height=window_size[1],
                         double_buffered=not openvr,
                         multisample=multisample)
-    gl.glClearColor(*clear_color)
+
     projection_matrix = np.zeros((4,4), dtype=np.float32)
     camera = None
     def on_resize(window, width, height):
@@ -62,10 +65,11 @@ INITIALIZING FOR GLTF VERSION %s...\nGENERATOR: %s''',
         if camera is None:
             gltfu.calc_perspective_projection(aspectRatio=window_size[0] / max(5, window_size[1]),
                                               out=projection_matrix)
-        elif 'perspective' in camera:
-            camera['perspective']['aspectRatio'] = window_size[0] / max(5, window_size[1])
+        else:
             gltfu.calc_projection_matrix(camera, out=projection_matrix)
     glfw.SetWindowSizeCallback(window, on_resize)
+
+    gl.glClearColor(*clear_color)
 
     if version.startswith('1.'):
         shader_ids = gltfu.setup_shaders(gltf, uri_path)
@@ -102,37 +106,33 @@ INITIALIZING FOR GLTF VERSION %s...\nGENERATOR: %s''',
     if camera_world_matrix is None:
         camera_world_matrix = np.eye(4, dtype=np.float32)
 
-    process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window)
-
     # sort nodes from front to back to avoid overdraw (assuming opaque objects):
     nodes = sorted(nodes, key=lambda node: np.linalg.norm(camera_world_matrix[3, :3] - node['world_matrix'][3, :3]))
+
+    process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window)
 
     _t1 = time.time()
     _dt = _t1 - _t0
     _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _dt);
 
+    # BURNER FRAME:
+    gltfu.num_draw_calls = 0
+    process_input(0.0)
+    render(gltf, nodes, window_size,
+           camera_world_matrix=camera_world_matrix,
+           projection_matrix=projection_matrix)
+    num_draw_calls_per_frame = gltfu.num_draw_calls
+    _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame); stdout.flush()
+
+    _logger.info('''STARTING RENDER LOOP...'''); stdout.flush()
+    import gc; gc.collect()
+
     if openvr and OpenVRRenderer is not None:
-        _logger.info('''STARTING VR RENDER LOOP...
-
-  KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
-                     Q/Z --------------- move Up/Down
-                     <-/-> (arrow keys)- turn Lft/Rgt
-                     Esc --------------- exit
-
-  HTC VIVE CONTROLS: TBD
-'''); stdout.flush()
         vr_renderer = OpenVRRenderer(multisample=multisample, poll_tracked_device_frequency=90)
         render_stats = vr_render_loop(vr_renderer=vr_renderer, process_input=process_input, window=window,
                                       window_size=window_size, gltf=gltf, nodes=nodes)
         vr_renderer.shutdown()
     else:
-        _logger.info('''STARTING RENDER LOOP...
-
-  KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
-                     Q/Z --------------- move Up/Down
-                     <-/-> (arrow keys)- turn Lft/Rgt
-                     Esc --------------- exit
-'''); stdout.flush()
         render_stats = render_loop(process_input=process_input, window=window, window_size=window_size,
                                    gltf=gltf, nodes=nodes,
                                    camera_world_matrix=camera_world_matrix,
@@ -148,43 +148,46 @@ INITIALIZING FOR GLTF VERSION %s...\nGENERATOR: %s''',
 
 def render_loop(process_input=None, window=None, gltf=None, nodes=None, window_size=None,
                 camera_world_matrix=None, projection_matrix=None):
-    import gc; gc.collect()
-    gltfu.num_draw_calls = 0
     nframes = 0
     dt_max = 0.0
-    lt = glfw.GetTime()
+    lt = st = glfw.GetTime()
     while not glfw.WindowShouldClose(window):
         t = glfw.GetTime()
         dt = t - lt
         lt = t
+        dt_max = max(dt, dt_max)
         process_input(dt)
-        gl.glViewport(0, 0, window_size[0], window_size[1])
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        view_matrix = np.linalg.inv(camera_world_matrix)
-        gltfu.set_material_state.current_material = None
-        gltfu.set_technique_state.current_technique = None
-        for node in nodes:
-            gltfu.draw_node(node, gltf,
-                            projection_matrix=projection_matrix,
-                            view_matrix=view_matrix)
-        if nframes == 0:
-            _logger.info("NUM DRAW CALLS PER FRAME: %d", gltfu.num_draw_calls); stdout.flush()
-            st = glfw.GetTime()
-        else:
-            dt_max = max(dt, dt_max)
+        render(gltf, nodes, window_size,
+               camera_world_matrix=camera_world_matrix,
+               projection_matrix=projection_matrix)
         nframes += 1
         glfw.SwapBuffers(window)
-    return {'NUM FRAMES RENDERER': nframes - 1,
-            'AVERAGE FPS': (nframes - 1) / (t - st),
+    return {'NUM FRAMES RENDERER': nframes,
+            'AVERAGE FPS': nframes / (t - st),
             'MAX FRAME RENDER TIME': dt_max}
 
 
+def render(gltf, nodes, window_size,
+           camera_world_matrix=None, projection_matrix=None,
+           **frame_data):
+    gl.glViewport(0, 0, window_size[0], window_size[1])
+    gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
+    view_matrix = np.linalg.inv(camera_world_matrix)
+    if camera_world_matrix is not None:
+        view_matrix = np.linalg.inv(camera_world_matrix)
+    gltfu.set_material_state.current_material = None
+    gltfu.set_technique_state.current_technique = None
+    for node in nodes:
+        gltfu.draw_node(node, gltf,
+                        projection_matrix=projection_matrix,
+                        view_matrix=view_matrix)
+
+
 def vr_render_loop(vr_renderer=None, process_input=None, window=None, gltf=None, nodes=None, window_size=None):
-    import gc; gc.collect()
     gltfu.num_draw_calls = 0
     nframes = 0
     dt_max = 0.0
-    lt = glfw.GetTime()
+    st = lt = glfw.GetTime()
     while not glfw.WindowShouldClose(window):
         t = glfw.GetTime()
         dt = t - lt
@@ -192,19 +195,25 @@ def vr_render_loop(vr_renderer=None, process_input=None, window=None, gltf=None,
         process_input(dt)
         vr_renderer.process_input()
         vr_renderer.render(gltf, nodes, window_size)
-        if nframes == 0:
-            _logger.info("NUM DRAW CALLS PER FRAME: %d", gltfu.num_draw_calls); stdout.flush()
-            st = glfw.GetTime()
-        else:
-            dt_max = max(dt, dt_max)
+        dt_max = max(dt, dt_max)
         nframes += 1
         glfw.SwapBuffers(window)
-    return {'NUM FRAMES RENDERER': nframes - 1,
-            'AVERAGE FPS': (nframes - 1) / (t - st),
+    return {'NUM FRAMES RENDERER': nframes,
+            'AVERAGE FPS': nframes / (t - st),
             'MAX FRAME RENDER TIME': dt_max}
 
 
 def setup_controls(camera_world_matrix=None, window=None):
+    _logger.info('''
+
+  KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
+                     Q/Z --------------- move Up/Down
+                     <-/-> (arrow keys)- turn Lft/Rgt
+                     Esc --------------- exit
+
+  HTC VIVE CONTROLS: TBD
+
+''')
     camera_position = camera_world_matrix[3, :3]
     camera_rotation = camera_world_matrix[:3, :3]
     dposition = np.zeros(3, dtype=np.float32)
