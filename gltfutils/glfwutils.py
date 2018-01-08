@@ -109,36 +109,39 @@ INITIALIZING FOR GLTF VERSION %s...\nGENERATOR: %s''',
 
     _t1 = time.time()
     _dt = _t1 - _t0
-    _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)
+    _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _dt);
 
-STARTING RENDER LOOP...
-
-    KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
-                       Q/Z --------------- move Up/Down
-                       <-/-> (arrow keys)- turn Lft/Rgt
-                       Esc --------------- exit
-
-    MOUSE CONTROLS   : TBD
-
-    HTC VIVE CONTROLS: TBD
-
-''', _dt); stdout.flush()
-    vr_renderer = None
     if openvr and OpenVRRenderer is not None:
+        _logger.info('''STARTING VR RENDER LOOP...
+
+  KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
+                     Q/Z --------------- move Up/Down
+                     <-/-> (arrow keys)- turn Lft/Rgt
+                     Esc --------------- exit
+
+  HTC VIVE CONTROLS: TBD
+'''); stdout.flush()
         vr_renderer = OpenVRRenderer(multisample=multisample, poll_tracked_device_frequency=90)
         render_stats = vr_render_loop(vr_renderer=vr_renderer, process_input=process_input, window=window,
                                       window_size=window_size, gltf=gltf, nodes=nodes)
+        vr_renderer.shutdown()
     else:
+        _logger.info('''STARTING RENDER LOOP...
+
+  KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
+                     Q/Z --------------- move Up/Down
+                     <-/-> (arrow keys)- turn Lft/Rgt
+                     Esc --------------- exit
+'''); stdout.flush()
         render_stats = render_loop(process_input=process_input, window=window, window_size=window_size,
                                    gltf=gltf, nodes=nodes,
                                    camera_world_matrix=camera_world_matrix,
                                    projection_matrix=projection_matrix)
+
     _logger.info('''QUITING...
 
 %s
 ''', '\n'.join('  %21s: %s' % (k, v) for k, v in render_stats.items()))
-    if vr_renderer is not None:
-        vr_renderer.shutdown()
     glfw.DestroyWindow(window)
     glfw.Terminate()
 
@@ -165,8 +168,7 @@ def render_loop(process_input=None, window=None, gltf=None, nodes=None, window_s
                             projection_matrix=projection_matrix,
                             view_matrix=view_matrix)
         if nframes == 0:
-            _logger.info("NUM DRAW CALLS PER FRAME: %d", gltfu.num_draw_calls)
-            stdout.flush()
+            _logger.info("NUM DRAW CALLS PER FRAME: %d", gltfu.num_draw_calls); stdout.flush()
             st = glfw.GetTime()
         else:
             dt_max = max(dt, dt_max)
@@ -191,8 +193,7 @@ def vr_render_loop(vr_renderer=None, process_input=None, window=None, gltf=None,
         vr_renderer.process_input()
         vr_renderer.render(gltf, nodes, window_size)
         if nframes == 0:
-            _logger.info("NUM DRAW CALLS PER FRAME: %d", gltfu.num_draw_calls)
-            stdout.flush()
+            _logger.info("NUM DRAW CALLS PER FRAME: %d", gltfu.num_draw_calls); stdout.flush()
             st = glfw.GetTime()
         else:
             dt_max = max(dt, dt_max)
