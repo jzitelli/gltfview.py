@@ -5,7 +5,7 @@
 html {
     font-family: sans-serif;
     font-size: 94%;
-    background: url("/_static/screenshot.png") no-repeat center center fixed;
+    background: url("screenshot.png") no-repeat center center fixed;
     background-size: cover;
 }
 body {
