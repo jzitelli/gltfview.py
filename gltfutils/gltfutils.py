@@ -210,7 +210,6 @@ def setup_buffers(gltf, uri_path):
             _logger.debug('loaded buffer "%s" (from %s)', buffer_name, filename)
     for bufferView_name, bufferView in gltf['bufferViews'].items():
         buffer_id = gl.glGenBuffers(1)
-        #byteLength = bufferView['byteLength']
         byteOffset = bufferView['byteOffset']
         gl.glBindBuffer(bufferView['target'], buffer_id)
         gl.glBufferData(bufferView['target'], bufferView['byteLength'],
@@ -391,8 +390,10 @@ def set_draw_state(primitive, gltf,
                         buffer_id = bufferView['id']
                         gl.glBindBuffer(bufferView['target'], buffer_id)
                     gl.glVertexAttribPointer(location, GLTF_BUFFERVIEW_TYPE_SIZES[accessor['type']],
-                                             accessor['componentType'], False, accessor.get('byteStride', bufferView.get('byteStride')),
-                                             c_void_p(accessor['byteOffset']))
+                                             accessor['componentType'], False,
+                                             accessor.get('byteStride', # GLTF 1.0
+                                                          bufferView.get('byteStride')), # GLTF 2.0
+                                             c_void_p(accessor.get('byteOffset', 0)))
                 else:
                     raise Exception('expected a semantic property for attribute "%s", parameter "%s"' % (attribute_name, parameter_name))
         primitive['vao'] = vao
@@ -424,7 +425,7 @@ def draw_primitive(primitive, gltf,
     index_bufferView = gltf['bufferViews'][index_accessor['bufferView']]
     gl.glBindBuffer(index_bufferView['target'], index_bufferView['id'])
     gl.glDrawElements(primitive['mode'], index_accessor['count'], index_accessor['componentType'],
-                      c_void_p(index_accessor['byteOffset']))
+                      c_void_p(index_accessor.get('byteOffset', 0)))
     global num_draw_calls
     num_draw_calls += 1
     if CHECK_GL_ERRORS:
