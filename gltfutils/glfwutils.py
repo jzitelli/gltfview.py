@@ -90,20 +90,19 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
         else:
             scene = gltf['scenes'][0]
 
+
     nodes = [gltf['nodes'][n] for n in scene['nodes']]
     for node in nodes:
         gltfu.update_world_matrices(node, gltf)
 
-    camera_world_matrix = None
-    for node in nodes:
-        if 'camera' in node:
-            camera = gltf['cameras'][node['camera']]
-            gltfu.calc_projection_matrix(camera, out=projection_matrix)
-            camera_world_matrix = node['world_matrix']
-            break
-    if not projection_matrix.any():
+    camera, camera_node = gltfu.find_camera_in_nodes(gltf, nodes)
+    if camera is not None:
+        _logger.info('using camera:\n%s\n%s', camera, camera.__class__)
+        gltfu.calc_projection_matrix(camera, out=projection_matrix)
+        camera_world_matrix = camera_node['world_matrix']
+    else:
+        _logger.info('no camera specified, using default')
         gltfu.calc_perspective_projection(out=projection_matrix)
-    if camera_world_matrix is None:
         camera_world_matrix = np.eye(4, dtype=np.float32)
 
     # sort nodes from front to back to avoid overdraw (assuming opaque objects):

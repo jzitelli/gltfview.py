@@ -527,3 +527,16 @@ def update_world_matrices(node, gltf, world_matrix=None):
     if 'children' in node:
         for child in [gltf['nodes'][n] for n in node['children']]:
             update_world_matrices(child, gltf, world_matrix=world_matrix)
+
+
+def find_camera_in_nodes(gltf, nodes):
+    camera = None
+    for node in nodes:
+        if 'camera' in node:
+            return gltf['cameras'][node['camera']], node
+        elif node.get('children', []):
+            camera, camera_node = find_camera_in_nodes(gltf, [gltf['nodes'][n]
+                                                              for n in node.get('children', [])])
+            if camera is not None:
+                return camera, camera_node
+    return camera, None
