@@ -11,19 +11,23 @@
 //     https://github.com/KhronosGroup/glTF-WebGL-PBR/#environment-maps
 // [4] "An Inexpensive BRDF Model for Physically based Rendering" by Christophe Schlick
 //     https://www.cs.virginia.edu/~jdl/bib/appearance/analytic%20models/schlick94b.pdf
-// #extension GL_EXT_shader_texture_lod: enable
-// #extension GL_OES_standard_derivatives : enable
+//#extension GL_EXT_shader_texture_lod: enable
+//#extension GL_OES_standard_derivatives : enable
 
 precision highp float;
 
 uniform vec3 u_LightDirection;
 uniform vec3 u_LightColor;
 
-// #ifdef USE_IBL
-// uniform samplerCube u_DiffuseEnvSampler;
-// uniform samplerCube u_SpecularEnvSampler;
-// //uniform sampler2D u_brdfLUT;
-// #endif
+#ifdef USE_IBL
+uniform samplerCube u_DiffuseEnvSampler;
+uniform samplerCube u_SpecularEnvSampler;
+//uniform vec4 u_ScaleIBLAmbient;
+uniform vec4 u_DiffuseFactor;
+uniform vec3 u_SpecularFactor;
+uniform float u_GlossinessFactor;
+//uniform sampler2D u_brdfLUT;
+#endif
 
 #ifdef HAS_BASECOLORMAP
 uniform sampler2D u_BaseColorSampler;
@@ -44,15 +48,17 @@ uniform sampler2D u_OcclusionSampler;
 uniform float u_OcclusionStrength;
 #endif
 
-uniform vec2 u_MetallicRoughnessValues;
+//uniform vec2 u_MetallicRoughnessValues;
+uniform float u_MetallicFactor;
+uniform float u_RoughnessFactor;
+
 uniform vec4 u_BaseColorFactor;
 
 uniform vec3 u_Camera;
 
 // debugging flags used for shader output of intermediate PBR variables
-uniform vec4 u_ScaleDiffBaseMR;
-uniform vec4 u_ScaleFGDSpec;
-uniform vec4 u_ScaleIBLAmbient;
+//uniform vec4 u_ScaleDiffBaseMR;
+//uniform vec4 u_ScaleFGDSpec;
 
 varying vec3 v_Position;
 
@@ -147,23 +153,22 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     float lod = (pbrInputs.perceptualRoughness * mipCount);
     // retrieve a scale and bias to F0. See [1], Figure 3
     //vec3 brdf = SRGBtoLINEAR(texture2D(u_brdfLUT, vec2(pbrInputs.NdotV, 1.0 - pbrInputs.perceptualRoughness))).rgb;
-    //vec3 diffuseLight = SRGBtoLINEAR(textureCube(u_DiffuseEnvSampler, n)).rgb;
+    vec3 diffuseLight = SRGBtoLINEAR(textureCube(u_DiffuseEnvSampler, n)).rgb;
 
-    //#ifdef USE_TEX_LOD
-    //    vec3 specularLight = SRGBtoLINEAR(textureCubeLodEXT(u_SpecularEnvSampler, reflection, lod)).rgb;
-    //#else
-    //    vec3 specularLight = SRGBtoLINEAR(textureCube(u_SpecularEnvSampler, reflection)).rgb;
-    //#endif
+#ifdef USE_TEX_LOD
+    vec3 specularLight = SRGBtoLINEAR(textureCubeLodEXT(u_SpecularEnvSampler, reflection, lod)).rgb;
+#else
+    vec3 specularLight = SRGBtoLINEAR(textureCube(u_SpecularEnvSampler, reflection)).rgb;
+#endif
 
-    //vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
-    vec3 diffuse = vec3(0.5, 0.5, 0.5);
-    //vec3 specular = specularLight * (pbrInputs.specularColor * brdf.x + brdf.y);
+    vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
+    vec3 specular = specularLight * (pbrInputs.specularColor * 1.0 + 0.0);
 
     // For presentation, this allows us to disable IBL terms
-    //diffuse *= u_ScaleIBLAmbient.x;
-    //specular *= u_ScaleIBLAmbient.y;
+    diffuse *= u_ScaleIBLAmbient.x;
+    specular *= u_ScaleIBLAmbient.y;
 
-    return diffuse;// + specular;
+    return diffuse + specular;
 }
 
 // Basic Lambertian diffuse
@@ -206,13 +211,13 @@ float microfacetDistribution(PBRInfo pbrInputs)
     return roughnessSq / (M_PI * f * f);
 }
 
-void main(void)
+void main()
 {
     // Metallic and Roughness material properties are packed together
     // In glTF, these factors can be specified by fixed scalar values
     // or from a metallic-roughness map
-    float perceptualRoughness = u_MetallicRoughnessValues.y;
-    float metallic = u_MetallicRoughnessValues.x;
+    float perceptualRoughness = u_RoughnessFactor;
+    float metallic = u_MetallicFactor;
 #ifdef HAS_METALROUGHNESSMAP
     // Roughness is stored in the 'g' channel, metallic is stored in the 'b' channel.
     // This layout intentionally reserves the 'r' channel for (optional) occlusion map data
@@ -302,15 +307,15 @@ void main(void)
 
     // This section uses mix to override final color for reference app visualization
     // of various parameters in the lighting equation.
-    color = mix(color, F, u_ScaleFGDSpec.x);
-    color = mix(color, vec3(G), u_ScaleFGDSpec.y);
-    color = mix(color, vec3(D), u_ScaleFGDSpec.z);
-    color = mix(color, specContrib, u_ScaleFGDSpec.w);
+    // color = mix(color, F, u_ScaleFGDSpec.x);
+    // color = mix(color, vec3(G), u_ScaleFGDSpec.y);
+    // color = mix(color, vec3(D), u_ScaleFGDSpec.z);
+    // color = mix(color, specContrib, u_ScaleFGDSpec.w);
 
-    color = mix(color, diffuseContrib, u_ScaleDiffBaseMR.x);
-    color = mix(color, baseColor.rgb, u_ScaleDiffBaseMR.y);
-    color = mix(color, vec3(metallic), u_ScaleDiffBaseMR.z);
-    color = mix(color, vec3(perceptualRoughness), u_ScaleDiffBaseMR.w);
+    // color = mix(color, diffuseContrib, u_ScaleDiffBaseMR.x);
+    // color = mix(color, baseColor.rgb, u_ScaleDiffBaseMR.y);
+    // color = mix(color, vec3(metallic), u_ScaleDiffBaseMR.z);
+    // color = mix(color, vec3(perceptualRoughness), u_ScaleDiffBaseMR.w);
 
     gl_FragColor = vec4(pow(color,vec3(1.0/2.2)), baseColor.a);
 }

@@ -5,7 +5,7 @@ import logging
 _logger = logging.getLogger(__name__)
 #_LOGGING_FORMAT =       '[gltfview.py] %(asctime).19s #%(levelname)s# %(message)s'
 _LOGGING_FORMAT = '%(name)s.%(funcName)s[%(levelname)s]: %(message)s'
-_DEBUG_LOGGING_FORMAT = '%(asctime).19s %(name)s.%(funcName)s[%(levelname)s]: %(message)s'
+_DEBUG_LOGGING_FORMAT = '%(asctime).19s %(name)s.%(funcName)s[%(levelname)s]:\n%(message)s\n'
 
 
 from gltfutils.glfwutils import view_gltf

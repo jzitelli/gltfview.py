@@ -48,5 +48,3 @@ void main()
 
   gl_Position = u_MVPMatrix * a_Position; // needs w for proper perspective correction
 }
-
-

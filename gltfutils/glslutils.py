@@ -2,7 +2,6 @@ import re
 from collections import deque
 from itertools import chain
 import logging
-
 _logger = logging.getLogger(__name__)
 
 
@@ -15,6 +14,9 @@ class RE(object):
     VERSION = re.compile(r'#version\W+(?P<version>\w+)')
     EXTENSION = re.compile(r'#extension\W+(?P<extension>\w+)')
     ALL = (DEFINE, IFDEF, IFNDEF, ELSE, ENDIF, VERSION, EXTENSION)
+    ALL_PP = (DEFINE, IFDEF, IFNDEF, ELSE, ENDIF, VERSION, EXTENSION)
+    ATTR = re.compile(r'\W*attribute(?P<var>\w+)\W+(?P<typespec>\w+)\W*[;|(?P<initval>\w+)]')
+    ALL_GLSL = (ATTR,)
 
 
 def preprocess(glsl, defines=None):
@@ -26,10 +28,10 @@ def preprocess(glsl, defines=None):
     src_lines = glsl.split('\n')
     lines = {i: l for i, l in enumerate(l.partition('//')[0].strip() for l in src_lines)
              if l}
+    preprocessed = {}
     pp_matches = {i: m for i, m in ((i, next((m for m in (rex.match(l) for rex in RE.ALL) if m), None))
                                      for i, l in lines.items())
                   if m}
-    preprocessed = {}
     stack = deque()
     version = '130'
     for i, src_line in enumerate(src_lines):

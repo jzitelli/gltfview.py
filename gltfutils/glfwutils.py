@@ -1,6 +1,7 @@
 from sys import stdout
 from collections import defaultdict
 import time
+import json
 import logging
 
 import numpy as np
@@ -39,6 +40,7 @@ def setup_glfw(width=800, height=600, double_buffered=False, multisample=None):
 
 def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, multisample=None, clear_color=(0.01, 0.01, 0.013, 0.0)):
     _t0 = time.time()
+    _logger.debug('GLTF contents:\n\n%s\n\n', json.dumps(gltf, indent=2, sort_keys=True))
     version = '1.0'
     generator = 'no generator was specified for this file'
     if 'asset' in gltf:
