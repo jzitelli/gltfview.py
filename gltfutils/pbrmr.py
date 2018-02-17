@@ -207,13 +207,11 @@ def setup_pbrmr_programs(gltf):
                 i_technique = defines_to_technique[key]
                 material_key = (i_technique, i_material)
                 if material_key not in technique_and_material_to_technique_material:
-                    values = material.get('pbrMetallicRoughness', {}).copy()
-                    values.update(material)
-                    for k, v in list(values.items()):
-                        if k not in _GLTF_UNIF_TO_DEFINE:
-                            values.pop(k)
-                        if k.endswith('Texture'):
-                            values[k] = v['index']
+                    values = material.copy()
+                    if 'pbrMetallicRoughness' in values:
+                        pbr = values.pop('pbrMetallicRoughness')
+                        values.update({k: v['index'] if k.endswith('Texture') else v
+                                       for k, v in pbr.items()})
                     technique_material = {
                         'values': values,
                         'technique': defines_to_technique[key]
@@ -228,8 +226,7 @@ def setup_pbrmr_programs(gltf):
     _logger.debug('number of techniques defined: %d\nnumber of materials defined: %d',
                   len(techniques), len(technique_materials))
 
-    raise Exception('asdf')
-
+    gltf['programs'] = []
     for i_program, (defines, i_technique) in enumerate(defines_to_technique.items()):
         _logger.debug('defines = %s', defines)
         v_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [vert_src])
@@ -292,6 +289,7 @@ now linking program %d...:
                                                                                  attribute_name)
                                           for attribute_name in program['attributes']}
         _logger.debug('attribute locations: %s', program['attribute_locations'])
+        gltf['techniques'][i_technique]['program'] = i_program
         gltf['programs'].append(program)
 
 
