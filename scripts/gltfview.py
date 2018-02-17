@@ -18,6 +18,8 @@ def main():
     parser.add_argument("--uri_prefix", help='prefix for relative path URIs (defaults to the directory of the glTF file)', default=None)
     parser.add_argument("--multisample", help='enable multisampling at the specified level (1, 2, or 4)', default=0)
     parser.add_argument("--openvr", help="view in VR", action="store_true")
+    parser.add_argument('-w', "--wireframe", help="view in wireframe mode", action="store_true")
+
     args = parser.parse_args()
 
     if args.verbose:

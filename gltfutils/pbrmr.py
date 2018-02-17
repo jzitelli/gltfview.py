@@ -1,14 +1,22 @@
 import os.path
 from copy import copy, deepcopy
-from collections import defaultdict
+from collections import defaultdict, deque
 from itertools import chain
 import json
+import re
 import logging
+_logger = logging.getLogger(__name__)
 
 import OpenGL.GL as gl
 
-_logger = logging.getLogger(__name__)
-_here = os.path.dirname(__file__)
+import gltfutils.glslutils as glslu
+
+
+_here = os.path.dirname(os.path.abspath(__file__))
+
+
+_VERT_SHADER_PATH = os.path.join(_here, 'shaders', 'pbr-vert.glsl')
+_FRAG_SHADER_PATH = os.path.join(_here, 'shaders', 'pbr-frag.glsl')
 
 
 _PBRMR_PROGRAM_ATTRIBUTES = {
@@ -20,6 +28,7 @@ _PBRMR_PROGRAM_ATTRIBUTES = {
              'semantic': 'TEXCOORD_0'},
     'a_Tangent': {'type': gl.GL_FLOAT_VEC4}
 }
+
 _PBRMR_PROGRAM_UNIFORMS = {
     'u_ModelMatrix': {'type'    : gl.GL_FLOAT_MAT4,
                       'semantic': 'MODELVIEW'},
@@ -58,11 +67,7 @@ _PBRMR_PROGRAM_UNIFORMS = {
     'u_ScaleIBLAmbient': {'type' : gl.GL_FLOAT_VEC4,
                           'value': [0.0, 0.0, 0.0, 0.0]}
 }
-_REQUIRED_ATTRIBUTES = ['a_Position']
-_REQUIRED_UNIFORMS = [#'u_MVPMatrix',
-                      'u_ModelMatrix',
-                      'u_ProjectionMatrix',
-                      ]
+
 _GLSL_TO_GLTF_ATTR = {'a_Position': 'POSITION',
                       'a_Normal'  : 'NORMAL',
                       'a_UV'      : 'TEXCOORD_0'}
@@ -83,26 +88,15 @@ _GLSL_TO_GLTF_UNIF = {'u_ModelMatrix'              : 'u_ModelMatrix',
                       'u_MetallicRoughnessValues.x': 'metallicFactor',
                       'u_MetallicRoughnessValues.y': 'roughnessFactor',
                       'u_BaseColorFactor'          : 'baseColorFactor'}
-_GLSL_ATTR_TO_DEFINE = {'a_Normal' : 'HAS_NORMALMAP',
-                        'a_Tangent': 'HAS_TANGENTS',
-                        'a_UV'     : 'HAS_UV'}
-_GLSL_UNIF_TO_DEFINE = {'u_DiffuseEnvSampler'       : 'USE_IBL',
-                        'u_SpecularEnvSampler'      : 'USE_IBL',
-                        'u_brdfLUT'                 : 'USE_IBL',
-                        'u_BaseColorSampler'        : 'HAS_COLORMAP',
-                        'u_NormalSampler'           : 'HAS_NORMALMAP',
-                        'u_NormalScale'             : 'HAS_NORMALMAP',
-                        'u_EmissiveSampler'         : 'HAS_EMISSIVEMAP',
-                        'u_EmissiveFactor'          : 'HAS_EMISSIVEMAP',
-                        'u_MetallicRoughnessSampler': 'HAS_METALROUGHNESSMAP',
-                        'u_OcclusionSampler'        : 'HAS_OCCLUSIONMAP',
-                        'u_OcclusionStrength'       : 'HAS_OCCLUSIONMAP'}
 _DEFINE_TO_GLTF_PBRMR_ATTRS = defaultdict(list)
 for attr, define in _GLSL_ATTR_TO_DEFINE.items():
     _DEFINE_TO_GLTF_PBRMR_ATTRS[define].append(attr)
 _DEFINE_TO_GLTF_PBRMR_UNIFS = defaultdict(list)
 for unif, define in _GLSL_UNIF_TO_DEFINE.items():
     _DEFINE_TO_GLTF_PBRMR_UNIFS[define].append(unif)
+# _REQUIRED_ATTRIBUTES = ['a_Position']
+# _REQUIRED_UNIFORMS = ['u_MVPMatrix',
+#                       'u_ModelMatrix']
 
 
 def setup_pbrmr_programs(gltf):
@@ -111,6 +105,16 @@ def setup_pbrmr_programs(gltf):
     with open(os.path.join(_here, 'shaders', 'pbr-frag.glsl')) as f:
         frag_src = f.read()
     materials = gltf.get('materials', [])
+    meshes = gltf.get('meshes', [])
+    primitive_to_defines = defaultdict(list)
+
+
+    for i, mesh in enumerate(meshes):
+        for j, primitive in enumerate(mesh.get('primitives', [])):
+            attributes = primitive.get('attributes', {})
+            if 'NORMAL' in attributes:
+
+
     defines_to_materials = defaultdict(list)
     for i, material in enumerate(materials):
         material_defines = sorted([_GLSL_ATTR_TO_DEFINE[k]
@@ -126,16 +130,22 @@ def setup_pbrmr_programs(gltf):
         gl.glShaderSource(vert_shader_id, v_src)
         gl.glCompileShader(vert_shader_id)
         if not gl.glGetShaderiv(vert_shader_id, gl.GL_COMPILE_STATUS):
-            raise Exception('FAILED to compile vertex shader %s:\n%s' % (i, gl.glGetShaderInfoLog(vert_shader_id).decode()))
+            raise Exception('FAILED to compile vertex shader %s:\n%s' %
+                            (i, gl.glGetShaderInfoLog(vert_shader_id).decode()))
         _logger.debug('..successfully compiled vertex shader %s', vert_shader_id)
-        f_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [frag_src])
-        _logger.debug('compiling fragment shader...:\n%s', f_src)
+
+        #f_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [frag_src])
+        #_logger.debug('compiling fragment shader...:\n%s', f_src)
+        _logger.debug('preprocessing fragment shader...:\n\n%s\n\n', frag_src)
+        f_src = glslu.preprocess_glsl(frag_src, defines={var: 1 for var in defines})
+        _logger.debug('...done. Compiling fragment shader...:\n\n%s\n\n', f_src)
         frag_shader_id = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
         gl.glShaderSource(frag_shader_id, f_src)
         gl.glCompileShader(frag_shader_id)
         if not gl.glGetShaderiv(frag_shader_id, gl.GL_COMPILE_STATUS):
             raise Exception('FAILED to compile fragment shader %s:\n%s' % (i, gl.glGetShaderInfoLog(frag_shader_id).decode()))
         _logger.debug('...successfully compiled fragment shader %s', frag_shader_id)
+        _logger.debug('linking program...')
         program_id = gl.glCreateProgram()
         gl.glAttachShader(program_id, vert_shader_id)
         gl.glAttachShader(program_id, frag_shader_id)
@@ -144,6 +154,7 @@ def setup_pbrmr_programs(gltf):
         gl.glDetachShader(program_id, frag_shader_id)
         if not gl.glGetProgramiv(program_id, gl.GL_LINK_STATUS):
             raise Exception('FAILED to link program %s' % i)
+        _logger.debug('...successfully linked program %s' % i)
         attributes = copy(_REQUIRED_ATTRIBUTES)
         attributes += list(chain(_DEFINE_TO_GLTF_PBRMR_ATTRS[define]
                                  for define in defines))
@@ -158,7 +169,7 @@ def setup_pbrmr_programs(gltf):
                                     for attribute_name in attributes},
             'uniform_locations': {}
         }
-        _logger.debug('linked program %s\n  attribute locations: %s\n  uniforms: %s', i, program['attribute_locations'], program['uniforms'])
+        #_logger.debug('linked program %s\n  attribute locations: %s\n  uniforms: %s', i, program['attribute_locations'], program['uniforms'])
         programs.append(program)
         parameters = {_GLSL_TO_GLTF_ATTR[k]: deepcopy(v)
                       for k, v in _PBRMR_PROGRAM_ATTRIBUTES.items() if k in attributes}
