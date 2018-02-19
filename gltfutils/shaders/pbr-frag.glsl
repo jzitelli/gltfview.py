@@ -11,13 +11,13 @@
 //     https://github.com/KhronosGroup/glTF-WebGL-PBR/#environment-maps
 // [4] "An Inexpensive BRDF Model for Physically based Rendering" by Christophe Schlick
 //     https://www.cs.virginia.edu/~jdl/bib/appearance/analytic%20models/schlick94b.pdf
-//#extension GL_EXT_shader_texture_lod: enable
-//#extension GL_OES_standard_derivatives : enable
+#extension GL_EXT_shader_texture_lod: enable
+#extension GL_OES_standard_derivatives : enable
 
 precision highp float;
 
-uniform vec3 u_LightDirection;
-uniform vec3 u_LightColor;
+uniform vec3 u_LightDirection = vec3(0.1, 0.5, 0.22);
+uniform vec3 u_LightColor = vec3(1.0, 0.8, 0.7);
 
 #ifdef USE_IBL
 uniform samplerCube u_DiffuseEnvSampler;
@@ -49,19 +49,19 @@ uniform float u_OcclusionStrength;
 #endif
 
 //uniform vec2 u_MetallicRoughnessValues;
-uniform float u_MetallicFactor;
-uniform float u_RoughnessFactor;
+uniform float u_MetallicFactor = 0.1;
+uniform float u_RoughnessFactor = 0.8;
 
-uniform vec4 u_BaseColorFactor;
+uniform vec4 u_BaseColorFactor = vec4(1.0, 1.0, 0.0, 1.0);
 
-uniform vec3 u_Camera;
+// uniform vec3 u_Camera = vec3(4.00113, 4.63264, -4.31078);
+uniform vec3 u_Camera = vec3(400.1130065917969, 463.2640075683594, 431.0780334472656);
 
 // debugging flags used for shader output of intermediate PBR variables
 //uniform vec4 u_ScaleDiffBaseMR;
 //uniform vec4 u_ScaleFGDSpec;
 
 varying vec3 v_Position;
-
 varying vec2 v_UV;
 
 #ifdef HAS_NORMALS
@@ -144,6 +144,7 @@ vec3 getNormal()
     return n;
 }
 
+#ifdef USE_IBL
 // Calculation of the lighting contribution from an optional Image Based Light source.
 // Precomputed Environment Maps are required uniform inputs and are computed as outlined in [1].
 // See our README.md on Environment Maps [3] for additional discussion.
@@ -170,6 +171,7 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
 
     return diffuse + specular;
 }
+#endif
 
 // Basic Lambertian diffuse
 // Implementation from Lambert's Photometria https://archive.org/details/lambertsphotome00lambgoog
@@ -211,8 +213,14 @@ float microfacetDistribution(PBRInfo pbrInputs)
     return roughnessSq / (M_PI * f * f);
 }
 
+
+
 void main()
 {
+    // gl_FragColor = vec4(1.0, 1.0, 0.0, 0.0);
+
+
+
     // Metallic and Roughness material properties are packed together
     // In glTF, these factors can be specified by fixed scalar values
     // or from a metallic-roughness map
@@ -254,6 +262,7 @@ void main()
 
     vec3 n = getNormal();                             // normal at surface point
     vec3 v = normalize(u_Camera - v_Position);        // Vector from surface point to camera
+
     vec3 l = normalize(u_LightDirection);             // Vector from surface point to light
     vec3 h = normalize(l+v);                          // Half vector between both l and v
     vec3 reflection = -normalize(reflect(v, n));
@@ -287,7 +296,7 @@ void main()
     // Calculation of analytical lighting contribution
     vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);
     vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
-    vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
+    vec3 color = NdotL * u_LightColor * 1.0; //(diffuseContrib + specContrib);
 
     // Calculate lighting contribution from image based lighting source (IBL)
 #ifdef USE_IBL

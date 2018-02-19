@@ -169,22 +169,22 @@ def render_loop(process_input=None, window=None, gltf=None, nodes=None, window_s
 
 
 def render(gltf, nodes, window_size,
-           camera_world_matrix=None, projection_matrix=None,
+           projection_matrix=None,
+           camera_world_matrix=None,
            **frame_data):
     gl.glViewport(0, 0, window_size[0], window_size[1])
     gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-    view_matrix = np.linalg.inv(camera_world_matrix)
-    if camera_world_matrix is not None:
-        view_matrix = np.linalg.inv(camera_world_matrix)
     gltfu.set_material_state.current_material = None
     gltfu.set_technique_state.current_technique = None
     for node in nodes:
         gltfu.draw_node(node, gltf,
                         projection_matrix=projection_matrix,
-                        view_matrix=view_matrix)
+                        camera_matrix=camera_world_matrix,
+                        **frame_data)
 
 
-def vr_render_loop(vr_renderer=None, process_input=None, window=None, gltf=None, nodes=None, window_size=None):
+def vr_render_loop(vr_renderer=None, process_input=None, window=None, window_size=None,
+                   gltf=None, nodes=None):
     gltfu.num_draw_calls = 0
     nframes = 0
     dt_max = 0.0
@@ -215,6 +215,9 @@ def setup_controls(camera_world_matrix=None, window=None):
   HTC VIVE CONTROLS: TBD
 
 ''')
+    _MOVE_KEYS = (glfw.KEY_W, glfw.KEY_S, glfw.KEY_A, glfw.KEY_D,
+                  glfw.KEY_Q, glfw.KEY_Z,
+                  glfw.KEY_LEFT, glfw.KEY_RIGHT)
     camera_position = camera_world_matrix[3, :3]
     camera_rotation = camera_world_matrix[:3, :3]
     dposition = np.zeros(3, dtype=np.float32)
@@ -253,10 +256,12 @@ def setup_controls(camera_world_matrix=None, window=None):
             theta -= dt * turn_speed
         if key_state[glfw.KEY_RIGHT]:
             theta += dt * turn_speed
-        rotation[0,0] = np.cos(theta)
-        rotation[2,2] = rotation[0,0]
-        rotation[0,2] = np.sin(theta)
-        rotation[2,0] = -rotation[0,2]
-        camera_rotation[...] = rotation.dot(camera_world_matrix[:3,:3])
-        camera_position[:] += camera_rotation.T.dot(dposition)
+        if theta:
+            rotation[0,0] = np.cos(theta)
+            rotation[2,2] = rotation[0,0]
+            rotation[0,2] = np.sin(theta)
+            rotation[2,0] = -rotation[0,2]
+            camera_rotation[...] = rotation.dot(camera_world_matrix[:3,:3])
+        if dposition.any():
+            camera_position[:] += camera_rotation.T.dot(dposition)
     return process_input

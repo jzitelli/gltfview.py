@@ -1,4 +1,6 @@
+precision highp float;
 attribute vec4 a_Position;
+
 #ifdef HAS_NORMALS
 attribute vec4 a_Normal;
 #endif
@@ -9,8 +11,10 @@ attribute vec4 a_Tangent;
 attribute vec2 a_UV;
 #endif
 
-uniform mat4 u_MVPMatrix;
+//uniform mat4 u_MVPMatrix;
+uniform mat4 u_ProjectionMatrix;
 uniform mat4 u_ModelMatrix;
+uniform mat4 u_ModelViewMatrix;
 
 varying vec3 v_Position;
 varying vec2 v_UV;
@@ -27,7 +31,7 @@ varying vec3 v_Normal;
 void main()
 {
   vec4 pos = u_ModelMatrix * a_Position;
-  v_Position = vec3(pos.xyz) / pos.w;
+  v_Position = pos.xyz / pos.w;
 
   #ifdef HAS_NORMALS
   #ifdef HAS_TANGENTS
@@ -46,5 +50,6 @@ void main()
   v_UV = vec2(0.,0.);
   #endif
 
-  gl_Position = u_MVPMatrix * a_Position; // needs w for proper perspective correction
+  //gl_Position = u_MVPMatrix * a_Position; // needs w for proper perspective correction
+  gl_Position = u_ProjectionMatrix * (u_ModelViewMatrix * vec4(a_Position.xyz, 1.0));
 }

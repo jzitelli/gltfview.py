@@ -7,82 +7,82 @@ _logger = logging.getLogger(__name__)
 
 import OpenGL.GL as gl
 
+
 _here = os.path.dirname(__file__)
 
+_EGA_VERT_SHADER_SRC_PATH = os.path.join(_here, 'shaders', 'ega-vert.glsl')
+_EGA_FRAG_SHADER_SRC_PATH = os.path.join(_here, 'shaders', 'ega-frag.glsl')
+
+_VERT_SHADER_SRC_PATH = os.path.join(_here, 'shaders', 'pbr-vert.glsl')
+_FRAG_SHADER_SRC_PATH = os.path.join(_here, 'shaders', 'pbr-frag.glsl')
 
 _REQUIRED_GLSL_ATTRS = ['a_Position']
 _GLSL_ATTR_TO_DEFINE = {'a_Normal' : 'HAS_NORMALS',
                         'a_Tangent': 'HAS_TANGENTS',
                         'a_UV'     : 'HAS_UV'}
 _GLSL_ATTR_PARAMS = {
-    'a_Position': {'type': gl.GL_FLOAT_VEC3,
-                   'semantic': 'POSITION'},
-    'a_Normal'  : {'type': gl.GL_FLOAT_VEC4,
-                   'semantic': 'NORMAL'},
-    'a_UV'      : {'type': gl.GL_FLOAT_VEC2,
-                   'semantic': 'TEXCOORD_0'},
-    'a_Tangent' : {'type': gl.GL_FLOAT_VEC4,
-                   'semantic': 'TANGENT'}
+    'a_Position': {'type': gl.GL_FLOAT_VEC3, 'semantic': 'POSITION'},
+    'a_Normal'  : {'type': gl.GL_FLOAT_VEC4, 'semantic': 'NORMAL'},
+    'a_UV'      : {'type': gl.GL_FLOAT_VEC2, 'semantic': 'TEXCOORD_0'},
+    'a_Tangent' : {'type': gl.GL_FLOAT_VEC4, 'semantic': 'TANGENT'}
 }
+_REQUIRED_GLSL_VERT_UNIFS =   [#'u_MVPMatrix',
+                               'u_ModelViewMatrix',
+                               'u_ProjectionMatrix',
+                               'u_ModelMatrix']
+_REQUIRED_GLSL_FRAG_UNIFS =   ['u_BaseColorFactor'];
+_GLSL_UNIF_TO_DEFINE      =   {'u_DiffuseEnvSampler'       : 'USE_IBL',
+                               'u_SpecularEnvSampler'      : 'USE_IBL',
+                               #'u_brdfLUT'                 : 'USE_IBL',
+                               'u_BaseColorSampler'        : 'HAS_COLORMAP',
+                               'u_NormalSampler'           : 'HAS_NORMALMAP',
+                               'u_NormalScale'             : 'HAS_NORMALMAP',
+                               'u_EmissiveSampler'         : 'HAS_EMISSIVEMAP',
+                               'u_EmissiveFactor'          : 'HAS_EMISSIVEMAP',
+                               'u_MetallicRoughnessSampler': 'HAS_METALROUGHNESSMAP',
+                               'u_OcclusionSampler'        : 'HAS_OCCLUSIONMAP',
+                               'u_OcclusionStrength'       : 'HAS_OCCLUSIONMAP'}
+_REQUIRED_GLSL_UNIFS = _REQUIRED_GLSL_VERT_UNIFS + _REQUIRED_GLSL_FRAG_UNIFS;
 
-
-_REQUIRED_GLSL_UNIFS =   ['u_MVPMatrix',
-                          'u_ModelMatrix',
-                          'u_ProjectionMatrix',
-                          'u_BaseColorFactor']
-_GLSL_UNIF_TO_DEFINE =   {'u_DiffuseEnvSampler'       : 'USE_IBL',
-                          'u_SpecularEnvSampler'      : 'USE_IBL',
-                          #'u_brdfLUT'                 : 'USE_IBL',
-                          'u_BaseColorSampler'        : 'HAS_COLORMAP',
-                          'u_NormalSampler'           : 'HAS_NORMALMAP',
-                          'u_NormalScale'             : 'HAS_NORMALMAP',
-                          'u_EmissiveSampler'         : 'HAS_EMISSIVEMAP',
-                          'u_EmissiveFactor'          : 'HAS_EMISSIVEMAP',
-                          'u_MetallicRoughnessSampler': 'HAS_METALROUGHNESSMAP',
-                          'u_OcclusionSampler'        : 'HAS_OCCLUSIONMAP',
-                          'u_OcclusionStrength'       : 'HAS_OCCLUSIONMAP'}
 _GLSL_UNIF_PARAMS = {
-    'u_ModelMatrix': {'type'    : gl.GL_FLOAT_MAT4,
-                      'semantic': 'MODELVIEW'},
-    'u_ProjectionMatrix': {'type': gl.GL_FLOAT_MAT4,
-                           'semantic': 'PROJECTION'},
-    'u_MVPMatrix': {'type'    : gl.GL_FLOAT_MAT4,
-                    'semantic': 'MODELVIEWPROJECTION'},
-    'u_Camera': {'type' : gl.GL_FLOAT_VEC3,
-                 'value': [0.0, 0.0, 1.0],
-                 'semantic': 'CAMERA_POSITION'}, # ??
-    'u_LightDirection': {'type' : gl.GL_FLOAT_VEC3,
-                         'value': [0.1, 1.0, 0.5]},
-    'u_LightColor': {'type' : gl.GL_FLOAT_VEC3,
-                     'value': [1.0, 1.0, 0.8]},
+    # vertex shader uniforms:
+    'u_LocalMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'LOCAL'},
+    'u_ModelMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'MODEL'},
+    'u_ViewMatrix':  {'type': gl.GL_FLOAT_MAT4,  'semantic': 'VIEW'},
+    'u_ModelViewMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'MODELVIEW'},
+    'u_ProjectionMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'PROJECTION'},
+    'u_MVPMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'MODELVIEWPROJECTION'},
+    'u_ModelInverseMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'MODELINVERSE'},
+    'u_CameraMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'VIEWINVERSE'},
+    'u_ModelViewInverseMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'MODELVIEWINVERSE'},
+    'u_ProjectionInverseMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'PROJECTIONINVERSE'},
+    'u_MVPInverseMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'MODELVIEWPROJECTIONINVERSE'},
+    'u_ModelInverseTranspose': {'type': gl.GL_FLOAT_MAT3, 'semantic': 'MODELINVERSETRANSPOSE'},
+    'u_NormalMatrix': {'type': gl.GL_FLOAT_MAT3, 'semantic': 'MODELVIEWINVERSETRANSPOSE'},
+    'u_JointMatrix': {'type': gl.GL_FLOAT_MAT4, 'semantic': 'JOINTMATRIX'},
+    # fragment shader uniforms:
+    'u_Viewport': {'type': gl.GL_FLOAT_VEC4, 'semantic': 'VIEWPORT'},
+    'u_BaseColorFactor': {'type': gl.GL_FLOAT_VEC4},#, 'value': [1.0, 1.0, 0.5, 0.0]},
+    'u_EmissiveFactor': {'type': gl.GL_FLOAT_VEC3},# 'value': [1.0, 1.0, 1.0]},
+    'u_MetallicFactor': {'type': gl.GL_FLOAT},# 'value': 0.0},
+    'u_RoughnessFactor': {'type': gl.GL_FLOAT},# 'value': 0.8},
+    'u_BaseColorSampler': {'type': gl.GL_SAMPLER_2D},
+    'u_MetallicRoughnessSampler': {'type': gl.GL_SAMPLER_2D},
+    'u_EmissiveSampler': {'type': gl.GL_SAMPLER_2D},
+    'u_NormalSampler': {'type': gl.GL_SAMPLER_2D},
+    'u_NormalScale': {'type': gl.GL_FLOAT},# 'value': 1.0},
     'u_DiffuseEnvSampler': {'type': gl.GL_SAMPLER_CUBE},
     'u_SpecularEnvSampler': {'type': gl.GL_SAMPLER_CUBE},
-    #'u_brdfLUT': {'type': gl.GL_SAMPLER_2D},
-    'u_BaseColorSampler': {'type': gl.GL_SAMPLER_2D},
-    'u_NormalSampler': {'type': gl.GL_SAMPLER_2D},
-    'u_NormalScale': {'type' : gl.GL_FLOAT,
-                      'value': 1.0},
-    'u_EmissiveSampler': {'type': gl.GL_SAMPLER_2D},
-    'u_EmissiveFactor': {'type' : gl.GL_FLOAT_VEC3,
-                         'value': [0.0, 0.0, 0.0]},
-    'u_MetallicRoughnessSampler': {'type': gl.GL_SAMPLER_2D},
     'u_OcclusionSampler': {'type': gl.GL_SAMPLER_2D},
-    'u_OcclusionStrength': {'type' : gl.GL_FLOAT,
-                            'value': 1.0},
-    # 'u_MetallicRoughnessValues': {'type' : gl.GL_FLOAT_VEC2,
-    #                               'value': [0.0, 0.0]},
-    'u_MetallicFactor': {'type': gl.GL_FLOAT,
-                         'value': 0.0},
-    'u_RoughnessFactor': {'type': gl.GL_FLOAT,
-                          'value': 0.0},
-    'u_BaseColorFactor': {'type' : gl.GL_FLOAT_VEC4,
-                          'value': [1.0, 1.0, 0.5, 0.0]},
-    'u_ScaleDiffBaseMR': {'type' : gl.GL_FLOAT_VEC4,
-                          'value': [0.0, 0.0, 0.0, 0.0]},
-    'u_ScaleFGDSpec': {'type' : gl.GL_FLOAT_VEC4,
-                       'value': [0.0, 0.0, 0.0, 0.0]},
-    'u_ScaleIBLAmbient': {'type' : gl.GL_FLOAT_VEC4,
-                          'value': [0.0, 0.0, 0.0, 0.0]}
+    'u_OcclusionStrength': {'type' : gl.GL_FLOAT},# 'value': 1.0},
+    'u_Camera': {'type': gl.GL_FLOAT_VEC3},# 'value': [0.0, 0.0, 1.0]},
+    'u_LightDirection': {'type': gl.GL_FLOAT_VEC3},
+    'u_LightColor': {'type': gl.GL_FLOAT_VEC3}
+    #'u_MetallicRoughnessValues': {'type' : gl.GL_FLOAT_VEC2, 'value': [0.0, 0.0]},
+    #'u_brdfLUT': {'type': gl.GL_SAMPLER_2D},
+    #'u_ScaleDiffBaseMR': {'type' : gl.GL_FLOAT_VEC4, 'value': [0.0, 0.0, 0.0, 0.0]},
+    #'u_ScaleFGDSpec': {'type' : gl.GL_FLOAT_VEC4, 'value': [0.0, 0.0, 0.0, 0.0]},
+    #'u_ScaleIBLAmbient': {'type' : gl.GL_FLOAT_VEC4, 'value': [0.0, 0.0, 0.0, 0.0]}
 }
 
 # _GLTF_ATTR_TO_DEFINE = {gltf_attr: _GLSL_ATTR_TO_DEFINE[glsl_attr]
@@ -105,33 +105,36 @@ _GLSL_UNIF_TO_GLTF_UNIF = {
     'u_MetallicFactor'           : 'metallicFactor',
     'u_RoughnessFactor'          : 'roughnessFactor',
     'u_MetallicRoughnessSampler' : 'metallicRoughnessTexture',
-    # specular-glossiness uniforms:
     'u_NormalSampler'            : 'normalTexture',
-    'u_NormalScale'              : 'normalTexture',
+    'u_NormalScale'              : 'normalScale',
     'u_OcclusionSampler'         : 'occlusionTexture',
-    'u_OcclusionStrength'        : 'occlusionTexture',
-    'u_EmissiveSampler'          : 'emissiveTexture',
-    'u_EmissiveFactor'           : 'emissiveTexture',
-    # general material uniforms:
+    'u_OcclusionStrength'        : 'occlusionStrength',
+    # specular-glossiness uniforms:
     'u_DiffuseEnvSampler'        : 'diffuseTexture',
     'u_DiffuseFactor'            : 'diffuseFactor',
     'u_SpecularEnvSampler'       : 'specularGlossinessTexture',
     'u_SpecularFactor'           : 'specularFactor',
     'u_GlossinessFactor'         : 'glossinessFactor',
-    # other uniforms:
+    'u_EmissiveSampler'          : 'emissiveTexture',
+    'u_EmissiveFactor'           : 'emissiveFactor',
+    # general fragment shader uniforms:
     'u_LightDirection'           : 'lightDirection',
     'u_LightColor'               : 'lightColor',
     'u_Camera'                   : 'cameraPosition',
     #'u_ScaleDiffBaseMR'          : 'scaleDiffBaseMR',
-    # vertex shader uniforms:
-    #'u_ModelMatrix'              : 'u_ModelMatrix',
-    #'u_ProjectionMatrix'         : 'u_ProjectionMatrix',
+    # vertex shader uniforms (should map to semantic):
+    'u_ModelMatrix'              : 'u_ModelMatrix',
+    'u_ModelViewMatrix'          : 'u_ModelViewMatrix',
+    'u_ViewMatrix'               : 'u_ViewMatrix',
+    'u_ProjectionMatrix'         : 'u_ProjectionMatrix',
+    'u_MVPMatrix'                : 'u_MVPMatrix'
 }
-
-
+_REQUIRED_GLTF_UNIFS = [_GLSL_UNIF_TO_GLTF_UNIF[unif] for unif in _REQUIRED_GLSL_UNIFS]
 _GLTF_UNIF_TO_DEFINE = {gltf_unif: _GLSL_UNIF_TO_DEFINE[glsl_unif]
                         for glsl_unif, gltf_unif in _GLSL_UNIF_TO_GLTF_UNIF.items()
                         if glsl_unif in _GLSL_UNIF_TO_DEFINE}
+_logger.debug('GLTF uniform to src #define:\n\n%s', '\n'.join('%s: %s' % (k, v)
+                                                              for k, v in _GLTF_UNIF_TO_DEFINE.items()))
 _DEFINE_TO_GLSL_UNIFS = {define: [item[0] for item in grp]
                          for define, grp in groupby(sorted(_GLSL_UNIF_TO_DEFINE.items(),
                                                            key=lambda item: item[1]),
@@ -140,14 +143,12 @@ _DEFINE_TO_GLTF_UNIFS = {define: [item[0] for item in grp]
                          for define, grp in groupby(sorted(_GLTF_UNIF_TO_DEFINE.items(),
                                                            key=lambda item: item[1]),
                                                     key=lambda item: item[1])}
-# _DEFINE_TO_GLTF_UNIFS = {define: [_GLSL_UNIF_TO_GLTF_UNIF[glsl_unif] for glsl_unif in glsl_unifs]
-#                          for define, glsl_unifs in _DEFINE_TO_GLSL_UNIFS.items()}
 
 
 def setup_pbrmr_programs(gltf):
-    with open(os.path.join(_here, 'shaders', 'pbr-vert.glsl')) as f:
+    with open(_VERT_SHADER_SRC_PATH) as f:
         vert_src = f.read()
-    with open(os.path.join(_here, 'shaders', 'pbr-frag.glsl')) as f:
+    with open(_FRAG_SHADER_SRC_PATH) as f:
         frag_src = f.read()
 
     # determine dependencies b/t GLTF 2.0 PBRMR material uniforms and GLSL #defines
@@ -188,39 +189,63 @@ def setup_pbrmr_programs(gltf):
                 prim_defines.sort()
                 key = tuple(prim_defines)
                 if key not in defines_to_technique:
-                    technique = {
-                        "states": {"enable": [2929, 2884]},
-                        "attributes": {_DEFINE_TO_GLSL_ATTR[define]: _DEFINE_TO_GLTF_ATTR[define]
-                                       for define in prim_defines},
-                        "uniforms": {glsl_unif: _GLSL_UNIF_TO_GLTF_UNIF[glsl_unif]
+                    attributes = {glsl_attr: _GLSL_ATTR_TO_GLTF_ATTR[glsl_attr]
+                                  for glsl_attr in _REQUIRED_GLSL_ATTRS}
+                    attributes.update({_DEFINE_TO_GLSL_ATTR[define]: _DEFINE_TO_GLTF_ATTR[define]
+                                       for define in prim_defines})
+                    uniforms = {glsl_unif: _GLSL_UNIF_TO_GLTF_UNIF[glsl_unif]
+                                for glsl_unif in _REQUIRED_GLSL_UNIFS}
+                    uniforms.update({glsl_unif: _GLSL_UNIF_TO_GLTF_UNIF[glsl_unif]
                                      for glsl_unif in chain(_DEFINE_TO_GLSL_UNIFS[define]
                                                             for define in prim_defines
-                                                            if define in _DEFINE_TO_GLSL_UNIFS)}
+                                                            if define in _DEFINE_TO_GLSL_UNIFS)})
+                    parameters = {gltf_attr: _GLSL_ATTR_PARAMS[glsl_attr]
+                                  for glsl_attr, gltf_attr in attributes.items()}
+                    parameters.update({gltf_unif: _GLSL_UNIF_PARAMS[glsl_unif]
+                                       for glsl_unif, gltf_unif in uniforms.items()})
+                    technique = {
+                        "states": {"enable": [2929, 2884]},
+                        "attributes": attributes,
+                        "uniforms": uniforms,
+                        "parameters": parameters
                     }
-                    technique['parameters'] = {gltf_attr: _GLSL_ATTR_PARAMS[glsl_attr]
-                                               for glsl_attr, gltf_attr in technique['attributes'].items()}
-                    technique['parameters'].update({gltf_unif: _GLSL_UNIF_PARAMS[glsl_unif]
-                                                    for glsl_unif, gltf_unif in technique['uniforms'].items()})
                     defines_to_technique[key] = len(techniques)
                     techniques.append(technique)
-                    _logger.debug('defined new GLTF 1.0 technique for defines %s: %s', prim_defines, json.dumps(technique, indent=1, sort_keys=True))
+                    _logger.debug('''
+defined GLTF 1.0 technique for defines %s:
+
+%s
+
+''',
+                                  prim_defines,
+                                  json.dumps(technique, indent=2, sort_keys=True))
                 i_technique = defines_to_technique[key]
                 material_key = (i_technique, i_material)
                 if material_key not in technique_and_material_to_technique_material:
                     values = material.copy()
                     if 'pbrMetallicRoughness' in values:
                         pbr = values.pop('pbrMetallicRoughness')
-                        values.update({k: v['index'] if k.endswith('Texture') else v
-                                       for k, v in pbr.items()})
+                        values.update(pbr)
+                    for k, v in list(values.items()):
+                        if k not in _REQUIRED_GLTF_UNIFS and k not in _GLTF_UNIF_TO_DEFINE:
+                            values.pop(k)
+                        if k.endswith('Texture'):
+                            values[k] = v['index']
                     technique_material = {
                         'values': values,
                         'technique': defines_to_technique[key]
                     }
                     technique_and_material_to_technique_material[material_key] = len(technique_materials)
                     technique_materials.append(technique_material)
-                    _logger.debug('defined GLTF 1.0 material for GLTF 2.0 material configuration (#defines: %s):\n%s',
-                                  ', '.join(prim_defines), json.dumps(technique_material, indent=1, sort_keys=True))
-                primitive['material'] = technique_and_material_to_technique_material[material_key]
+                    _logger.debug('''
+defined GLTF 1.0 material for PBRMR material configuration [ %s ]:
+
+%s
+
+''',
+                                  ', '.join(prim_defines),
+                                  json.dumps(technique_material, indent=2, sort_keys=True))
+                    primitive['material'] = technique_and_material_to_technique_material[material_key]
     gltf['techniques'] = techniques
     gltf['materials'] = technique_materials
     _logger.debug('number of techniques defined: %d\nnumber of materials defined: %d',
@@ -291,7 +316,3 @@ now linking program %d...:
         _logger.debug('attribute locations: %s', program['attribute_locations'])
         gltf['techniques'][i_technique]['program'] = i_program
         gltf['programs'].append(program)
-
-
-def _define_techniques_for_meshes(meshes, materials):
-    pass

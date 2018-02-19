@@ -46,10 +46,6 @@ _ATTRIBUTE_DECL_RE = re.compile(r"attribute\s+(?P<type_spec>\w+)\s+(?P<attribute
 _UNIFORM_DECL_RE =   re.compile(r"uniform\s+(?P<type_spec>\w+)\s+(?P<uniform_name>\w+)\s*(=\s*(?P<initialization>.*)\s*;|;)")
 
 
-class GLTFUException(Exception):
-    pass
-
-
 def setup_shaders(gltf, uri_path):
     """Loads and compiles all shaders defined or referenced in the given gltf"""
     shader_ids = {}
@@ -331,11 +327,14 @@ set_material_state.n_tex = 0
 
 
 def set_draw_state(primitive, gltf,
-                   modelview_matrix=None,
                    projection_matrix=None,
                    view_matrix=None,
+                   camera_matrix=None,
+                   model_matrix=None,
+                   modelview_matrix=None,
                    normal_matrix=None,
-                   mvp_matrix=None):
+                   mvp_matrix=None,
+                   local_matrix=None):
     set_material_state(primitive['material'], gltf)
     material = gltf['materials'][primitive['material']]
     technique = gltf['techniques'][material['technique']]
@@ -346,29 +345,38 @@ def set_draw_state(primitive, gltf,
     for uniform_name, parameter_name in technique['uniforms'].items():
         parameter = technique['parameters'][parameter_name]
         if 'semantic' in parameter:
+            semantic = parameter['semantic']
             location = gl.glGetUniformLocation(program['id'], uniform_name)
-            if parameter['semantic'] == 'MODELVIEW':
+            if semantic == 'MODELVIEW':
                 if 'node' in parameter and view_matrix is not None:
                     world_matrix = gltf['nodes'][parameter['node']]['world_matrix']
                     world_matrix.dot(view_matrix, out=set_draw_state.modelview_matrix)
                     gl.glUniformMatrix4fv(location, 1, False, set_draw_state.modelview_matrix)
                 elif modelview_matrix is not None:
                     gl.glUniformMatrix4fv(location, 1, False, modelview_matrix)
-            elif parameter['semantic'] == 'PROJECTION':
-                if 'node' in parameter:
-                    raise Exception('TODO')
-                elif projection_matrix is not None:
+            elif semantic == 'PROJECTION':
+                if projection_matrix is not None:
                     gl.glUniformMatrix4fv(location, 1, False, projection_matrix)
-            elif parameter['semantic'] == 'MODELVIEWINVERSETRANSPOSE':
-                if 'node' in parameter:
-                    raise Exception('TODO')
-                elif normal_matrix is not None:
+            elif semantic == 'MODELVIEWPROJECTION':
+                if mvp_matrix is not None:
+                    gl.glUniformMatrix4fv(location, 1, True, mvp_matrix)
+            elif semantic == 'MODEL':
+                if model_matrix is not None:
+                    gl.glUniformMatrix4fv(location, 1, False, model_matrix)
+            elif semantic == 'LOCAL':
+                if local_matrix is not None:
+                    gl.glUniformMatrix4fv(location, 1, False, local_matrix)
+            elif semantic == 'VIEW':
+                if view_matrix is not None:
+                    gl.glUniformMatrix4fv(location, 1, False, view_matrix)
+            elif semantic == 'VIEWINVERSE':
+                if camera_matrix is None and view_matrix is not None:
+                    camera_matrix = np.linalg.inv(view_matrix)
+                if camera_matrix is not None:
+                    gl.glUniformMatrix4fv(location, 1, False, camera_matrix)
+            elif semantic == 'MODELVIEWINVERSETRANSPOSE':
+                if normal_matrix is not None:
                     gl.glUniformMatrix3fv(location, 1, True, normal_matrix)
-            elif parameter['semantic'] == 'MODELVIEWPROJECTION':
-                if 'node' in parameter:
-                    raise Exception('TODO')
-                elif mvp_matrix is not None:
-                    gl.glUniformMatrix4fv(location, 1, False, mvp_matrix)
             else:
                 raise Exception('unhandled semantic for uniform "%s": %s' % (uniform_name, parameter['semantic']))
     if 'vao' not in primitive:
@@ -410,17 +418,23 @@ set_draw_state.vaos = {}
 
 
 def draw_primitive(primitive, gltf,
-                   modelview_matrix=None,
                    projection_matrix=None,
                    view_matrix=None,
+                   camera_matrix=None,
+                   model_matrix=None,
+                   modelview_matrix=None,
                    normal_matrix=None,
-                   mvp_matrix=None):
+                   mvp_matrix=None,
+                   local_matrix=None):
     set_draw_state(primitive, gltf,
-                   modelview_matrix=modelview_matrix,
                    projection_matrix=projection_matrix,
                    view_matrix=view_matrix,
+                   camera_matrix=camera_matrix,
+                   model_matrix=model_matrix,
+                   modelview_matrix=modelview_matrix,
                    normal_matrix=normal_matrix,
-                   mvp_matrix=mvp_matrix)
+                   mvp_matrix=mvp_matrix,
+                   local_matrix=local_matrix)
     index_accessor = gltf['accessors'][primitive['indices']]
     index_bufferView = gltf['bufferViews'][index_accessor['bufferView']]
     gl.glBindBuffer(index_bufferView['target'], index_bufferView['id'])
@@ -435,26 +449,45 @@ num_draw_calls = 0
 
 
 def draw_mesh(mesh, gltf,
-              modelview_matrix=None,
               projection_matrix=None,
               view_matrix=None,
+              camera_matrix=None,
+              model_matrix=None,
+              modelview_matrix=None,
               normal_matrix=None,
-              mvp_matrix=None):
+              #mvp_matrix=None,
+              local_matrix=None):
+    # set_vert_draw_state(projection_matrix=projection_matrix,
+    #                     view_matrix=view_matrix,
+    #                     camera_matrix=camera_matrix,
+    #                     model_matrix=model_matrix,
+    #                     modelview_matrix=modelview_matrix,
+    #                     normal_matrix=normal_matrix,
+    #                     mvp_matrix=mvp_matrix,
+    #                     local_matrix=local_matrix)
     for i, primitive in enumerate(mesh['primitives']):
         draw_primitive(primitive, gltf,
-                       modelview_matrix=(modelview_matrix if i == 0 else None),
                        projection_matrix=(projection_matrix if i == 0 else None),
                        view_matrix=(view_matrix if i == 0 else None),
+                       camera_matrix=(camera_matrix if i == 0 else None),
+                       model_matrix=(model_matrix if i == 0 else None),
+                       modelview_matrix=(modelview_matrix if i == 0 else None),
                        normal_matrix=(normal_matrix if i == 0 else None),
-                       mvp_matrix=(mvp_matrix if i == 0 else None))
+                       #mvp_matrix=(mvp_matrix if i == 0 else None),
+                       local_matrix=(local_matrix if i == 0 else None))
 
 
 def draw_node(node, gltf,
-              projection_matrix=None, view_matrix=None):
-    node['world_matrix'].dot(view_matrix, out=draw_node.modelview_matrix)
-    # if projection_matrix is not None:
-    #     draw_node.modelview_matrix.dot(projection_matrix, out=draw_node.mvp_matrix)
-    normal_matrix = np.linalg.inv(draw_node.modelview_matrix[:3,:3])
+              projection_matrix=None,
+              view_matrix=None,
+              camera_matrix=None):
+    model_matrix = node['world_matrix']
+    if view_matrix is None:
+        view_matrix = np.linalg.inv(camera_matrix)
+    model_matrix.dot(view_matrix, out=draw_node.modelview_matrix)
+    draw_node.normal_matrix[...] = np.linalg.inv(draw_node.modelview_matrix[:3,:3])
+    #if projection_matrix is not None:
+    #    projection_matrix.dot(draw_node.modelview_matrix, out=draw_node.mvp_matrix)
     if 'meshes' in node: # GLTF v1.0
         meshes = node['meshes']
     elif 'mesh' in node: # GLTF v2.0
@@ -463,15 +496,22 @@ def draw_node(node, gltf,
         meshes = []
     for mesh_name in meshes:
         draw_mesh(gltf['meshes'][mesh_name], gltf,
+                  projection_matrix=projection_matrix,
+                  view_matrix=view_matrix,
+                  camera_matrix=camera_matrix,
+                  model_matrix=model_matrix,
                   modelview_matrix=draw_node.modelview_matrix,
-                  projection_matrix=projection_matrix, view_matrix=view_matrix, normal_matrix=normal_matrix,
-                  mvp_matrix=draw_node.mvp_matrix)
+                  normal_matrix=draw_node.normal_matrix)
+                  #mvp_matrix=draw_node.mvp_matrix)
     if 'children' in node:
         for child in node['children']:
             draw_node(gltf['nodes'][child], gltf,
-                      projection_matrix=projection_matrix, view_matrix=view_matrix)
+                      projection_matrix=projection_matrix,
+                      view_matrix=view_matrix,
+                      camera_matrix=camera_matrix)
 draw_node.modelview_matrix = np.empty((4,4), dtype=np.float32)
-draw_node.mvp_matrix = np.empty((4,4), dtype=np.float32)
+draw_node.normal_matrix = np.eye(3, dtype=np.float32)
+#draw_node.mvp_matrix = np.empty((4,4), dtype=np.float32)
 
 
 def calc_projection_matrix(camera, out=None):
@@ -519,11 +559,12 @@ def update_world_matrices(node, gltf, world_matrix=None):
             matrix[:3, 3] = node['translation']
     else:
         matrix = np.array(node['matrix'], dtype=np.float32).reshape((4, 4)).T
+        node['matrix'] = np.ascontiguousarray(matrix)
     if world_matrix is None:
         world_matrix = matrix
     else:
         world_matrix = world_matrix.dot(matrix)
-    node['world_matrix'] = world_matrix.T
+    node['world_matrix'] = np.ascontiguousarray(world_matrix.T)
     if 'children' in node:
         for child in [gltf['nodes'][n] for n in node['children']]:
             update_world_matrices(child, gltf, world_matrix=world_matrix)
