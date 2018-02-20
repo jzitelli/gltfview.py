@@ -1,5 +1,4 @@
 import os.path
-from copy import copy, deepcopy
 from itertools import chain, groupby
 import json
 import logging
@@ -21,15 +20,16 @@ _GLSL_ATTR_TO_DEFINE = {'a_Normal' : 'HAS_NORMALS',
                         'a_Tangent': 'HAS_TANGENTS',
                         'a_UV'     : 'HAS_UV'}
 _GLSL_ATTR_PARAMS = {
-    'a_Position': {'type': gl.GL_FLOAT_VEC3, 'semantic': 'POSITION'},
+    'a_Position': {'type': gl.GL_FLOAT_VEC4, 'semantic': 'POSITION'},
     'a_Normal'  : {'type': gl.GL_FLOAT_VEC4, 'semantic': 'NORMAL'},
     'a_UV'      : {'type': gl.GL_FLOAT_VEC2, 'semantic': 'TEXCOORD_0'},
     'a_Tangent' : {'type': gl.GL_FLOAT_VEC4, 'semantic': 'TANGENT'}
 }
-_REQUIRED_GLSL_VERT_UNIFS =   [#'u_MVPMatrix',
-                               'u_ModelViewMatrix',
+_REQUIRED_GLSL_VERT_UNIFS =   ['u_ModelViewMatrix',
                                'u_ProjectionMatrix',
                                'u_ModelMatrix']
+                               #u_NormalMatrix
+                               #u_MVPMatrix
 _REQUIRED_GLSL_FRAG_UNIFS =   ['u_BaseColorFactor'];
 _GLSL_UNIF_TO_DEFINE      =   {'u_DiffuseEnvSampler'       : 'USE_IBL',
                                'u_SpecularEnvSampler'      : 'USE_IBL',
@@ -93,10 +93,9 @@ _GLTF_ATTR_TO_DEFINE = {'NORMAL': 'HAS_NORMALS',
                         'TEXCOORD_0': 'HAS_UV'}
 _DEFINE_TO_GLSL_ATTR = {define: attr for attr, define in _GLSL_ATTR_TO_DEFINE.items()}
 _DEFINE_TO_GLTF_ATTR = {define: attr for attr, define in _GLTF_ATTR_TO_DEFINE.items()}
-
-
 _GLSL_ATTR_TO_GLTF_ATTR = {'a_Position': 'POSITION',
                            'a_Normal'  : 'NORMAL',
+                           'a_Tangent' : 'TANGENT',
                            'a_UV'      : 'TEXCOORD_0'}
 _GLSL_UNIF_TO_GLTF_UNIF = {
     # metallic-roughness uniforms:
@@ -127,7 +126,10 @@ _GLSL_UNIF_TO_GLTF_UNIF = {
     'u_ModelViewMatrix'          : 'u_ModelViewMatrix',
     'u_ViewMatrix'               : 'u_ViewMatrix',
     'u_ProjectionMatrix'         : 'u_ProjectionMatrix',
-    'u_MVPMatrix'                : 'u_MVPMatrix'
+    'u_MVPMatrix'                : 'u_MVPMatrix',
+    'u_NormalMatrix'             : 'u_NormalMatrix',
+    'u_CameraMatrix'             : 'u_CameraMatrix',
+    'u_LocalMatrix'              : 'u_LocalMatrix'
 }
 _REQUIRED_GLTF_UNIFS = [_GLSL_UNIF_TO_GLTF_UNIF[unif] for unif in _REQUIRED_GLSL_UNIFS]
 _GLTF_UNIF_TO_DEFINE = {gltf_unif: _GLSL_UNIF_TO_DEFINE[glsl_unif]
@@ -159,8 +161,6 @@ def setup_pbrmr_programs(gltf):
                           for k in chain(material.keys(), material.get('pbrMetallicRoughness', {}).keys())
                           if k in _GLSL_UNIF_TO_DEFINE])
         material_defines.append(defines)
-    _logger.debug('material_defines = %s', material_defines)
-
     # scan all primitive attributes to determine all of the unique GLTF techniques (i.e. OpenGL programs)
     # to be defined / compiled to render the scene,
     # define new GLTF 1.0 techniques and materials
@@ -169,7 +169,6 @@ def setup_pbrmr_programs(gltf):
     technique_materials = []
     defines_to_technique = {}
     technique_and_material_to_technique_material = {}
-    primitive_to_technique = {}
     for i, mesh in enumerate(gltf.get('meshes', [])):
         for j, primitive in enumerate(mesh.get('primitives', [])):
             _logger.debug('mesh i, primitive j: %s', (j, primitive))
@@ -180,12 +179,9 @@ def setup_pbrmr_programs(gltf):
                 prim_defines = [] + material_defines[i_material]
                 attributes = primitive.get('attributes', {})
                 _logger.debug('primitive["attributes"] = %s', attributes)
-                if 'NORMAL' in attributes:
-                    prim_defines.append('HAS_NORMALS')
-                if 'TANGENT' in attributes:
-                    prim_defines.append('HAS_TANGENTS')
-                if 'TEXCOORD_0' in attributes:
-                    prim_defines.append('HAS_UV')
+                for gltf_attr in attributes.keys():
+                    if gltf_attr in _GLTF_ATTR_TO_DEFINE:
+                        prim_defines.append(_GLTF_ATTR_TO_DEFINE[gltf_attr])
                 prim_defines.sort()
                 key = tuple(prim_defines)
                 if key not in defines_to_technique:
@@ -212,13 +208,10 @@ def setup_pbrmr_programs(gltf):
                     defines_to_technique[key] = len(techniques)
                     techniques.append(technique)
                     _logger.debug('''
-defined GLTF 1.0 technique for defines %s:
+defined GLTF 1.0 technique for PBRMR material configuration [ %s ]:
 
 %s
-
-''',
-                                  prim_defines,
-                                  json.dumps(technique, indent=2, sort_keys=True))
+''', ', '.join(prim_defines), json.dumps(technique, indent=2, sort_keys=True))
                 i_technique = defines_to_technique[key]
                 material_key = (i_technique, i_material)
                 if material_key not in technique_and_material_to_technique_material:
@@ -238,14 +231,11 @@ defined GLTF 1.0 technique for defines %s:
                     technique_and_material_to_technique_material[material_key] = len(technique_materials)
                     technique_materials.append(technique_material)
                     _logger.debug('''
-defined GLTF 1.0 material for PBRMR material configuration [ %s ]:
+defined GLTF 1.0 material:
 
 %s
-
-''',
-                                  ', '.join(prim_defines),
-                                  json.dumps(technique_material, indent=2, sort_keys=True))
-                    primitive['material'] = technique_and_material_to_technique_material[material_key]
+''', json.dumps(technique_material, indent=2, sort_keys=True))
+                primitive['material'] = technique_and_material_to_technique_material[material_key]
     gltf['techniques'] = techniques
     gltf['materials'] = technique_materials
     _logger.debug('number of techniques defined: %d\nnumber of materials defined: %d',
@@ -253,9 +243,18 @@ defined GLTF 1.0 material for PBRMR material configuration [ %s ]:
 
     gltf['programs'] = []
     for i_program, (defines, i_technique) in enumerate(defines_to_technique.items()):
-        _logger.debug('defines = %s', defines)
         v_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [vert_src])
-        #_logger.debug('compiling vertex shader...:\n%s\n', v_src)
+#         _logger.debug('''compiling vertex shader...:
+
+# ================================================================================
+
+# %s
+
+# ================================================================================
+
+# ''', '\n'.join(ln for ln in
+#                (ln.strip() for ln in v_src.split('\n'))
+#                if ln))
         vert_shader_id = gl.glCreateShader(gl.GL_VERTEX_SHADER)
         gl.glShaderSource(vert_shader_id, v_src)
         gl.glCompileShader(vert_shader_id)
@@ -263,24 +262,31 @@ defined GLTF 1.0 material for PBRMR material configuration [ %s ]:
             raise Exception('FAILED to compile vertex shader %s:\n%s' % (i, gl.glGetShaderInfoLog(vert_shader_id).decode()))
         #_logger.debug('..successfully compiled vertex shader %s', vert_shader_id)
         f_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [frag_src])
-        _logger.debug('''...successfully compiled vertex shader.
+#         _logger.debug('''...successfully compiled vertex shader.
 
-compiling fragment shader...:
+# compiling fragment shader...:
 
-================================================================================
+# ================================================================================
 
-%s
+# %s
 
-================================================================================
+# ================================================================================
 
-''', '\n'.join(ln for ln in
-               (ln.strip() for ln in f_src.split('\n'))
-               if ln))
+# ''', '\n'.join(ln for ln in
+#                (ln.strip() for ln in f_src.split('\n'))
+#                if ln))
         frag_shader_id = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
         gl.glShaderSource(frag_shader_id, f_src)
         gl.glCompileShader(frag_shader_id)
         if not gl.glGetShaderiv(frag_shader_id, gl.GL_COMPILE_STATUS):
             raise Exception('FAILED to compile fragment shader %s:\n%s' % (i, gl.glGetShaderInfoLog(frag_shader_id).decode()))
+#         _logger.debug('''...successfully compiled fragment shader %s
+
+# linking program %d...:
+#   attributes: %s
+#   uniforms: %s
+
+# ''', frag_shader_id, i_program, attributes, uniforms)
         program_id = gl.glCreateProgram()
         attributes = _REQUIRED_GLSL_ATTRS + [_DEFINE_TO_GLSL_ATTR[define]
                                              for define in defines
@@ -294,13 +300,6 @@ compiling fragment shader...:
             'uniforms': uniforms,
             'uniform_locations': {}
         }
-        _logger.debug('''...successfully compiled fragment shader %s
-
-now linking program %d...:
-  attributes: %s
-  uniforms: %s
-
-''', frag_shader_id, i_program, attributes, uniforms)
         gl.glAttachShader(program_id, vert_shader_id)
         gl.glAttachShader(program_id, frag_shader_id)
         gl.glLinkProgram(program_id)
@@ -313,6 +312,8 @@ now linking program %d...:
         program['attribute_locations'] = {attribute_name: gl.glGetAttribLocation(program_id,
                                                                                  attribute_name)
                                           for attribute_name in program['attributes']}
-        _logger.debug('attribute locations: %s', program['attribute_locations'])
+        program['uniform_locations'] = {uniform_name: gl.glGetUniformLocation(program['id'], uniform_name)
+                                        for uniform_name in program['uniforms']}
+        _logger.debug('attribute locations: %s\nuniform locations: %s', program['attribute_locations'], program['uniform_locations'])
         gltf['techniques'][i_technique]['program'] = i_program
         gltf['programs'].append(program)

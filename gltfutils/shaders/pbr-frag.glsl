@@ -16,7 +16,7 @@
 
 precision highp float;
 
-uniform vec3 u_LightDirection = vec3(0.1, 0.5, 0.22);
+uniform vec3 u_LightDirection = vec3(0.1, 0.7, 0.22);
 uniform vec3 u_LightColor = vec3(1.0, 0.8, 0.7);
 
 #ifdef USE_IBL
@@ -50,12 +50,12 @@ uniform float u_OcclusionStrength;
 
 //uniform vec2 u_MetallicRoughnessValues;
 uniform float u_MetallicFactor = 0.1;
-uniform float u_RoughnessFactor = 0.8;
+uniform float u_RoughnessFactor = 0.4;
 
 uniform vec4 u_BaseColorFactor = vec4(1.0, 1.0, 0.0, 1.0);
 
-// uniform vec3 u_Camera = vec3(4.00113, 4.63264, -4.31078);
-uniform vec3 u_Camera = vec3(400.1130065917969, 463.2640075683594, 431.0780334472656);
+uniform vec3 u_Camera = vec3(4.00113, 4.63264, -4.31078);
+//uniform vec3 u_Camera = vec3(400.1130065917969, 463.2640075683594, 431.0780334472656);
 
 // debugging flags used for shader output of intermediate PBR variables
 //uniform vec4 u_ScaleDiffBaseMR;
@@ -261,7 +261,8 @@ void main()
     vec3 specularEnvironmentR90 = vec3(1.0, 1.0, 1.0) * reflectance90;
 
     vec3 n = getNormal();                             // normal at surface point
-    vec3 v = normalize(u_Camera - v_Position);        // Vector from surface point to camera
+    // vec3 v = normalize(u_Camera - v_Position);        // Vector from surface point to camera
+    vec3 v = normalize(-v_Position);
 
     vec3 l = normalize(u_LightDirection);             // Vector from surface point to light
     vec3 h = normalize(l+v);                          // Half vector between both l and v
@@ -296,7 +297,8 @@ void main()
     // Calculation of analytical lighting contribution
     vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);
     vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
-    vec3 color = NdotL * u_LightColor * 1.0; //(diffuseContrib + specContrib);
+    vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
+    // vec3 color = NdotL * u_LightColor * 1.0;
 
     // Calculate lighting contribution from image based lighting source (IBL)
 #ifdef USE_IBL

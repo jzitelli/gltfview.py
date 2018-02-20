@@ -448,6 +448,17 @@ def draw_primitive(primitive, gltf,
 num_draw_calls = 0
 
 
+def set_vert_draw_state(projection_matrix=None,
+                        view_matrix=None,
+                        camera_matrix=None,
+                        model_matrix=None,
+                        modelview_matrix=None,
+                        normal_matrix=None,
+                        mvp_matrix=None,
+                        local_matrix=None):
+    pass
+
+
 def draw_mesh(mesh, gltf,
               projection_matrix=None,
               view_matrix=None,
@@ -457,14 +468,6 @@ def draw_mesh(mesh, gltf,
               normal_matrix=None,
               #mvp_matrix=None,
               local_matrix=None):
-    # set_vert_draw_state(projection_matrix=projection_matrix,
-    #                     view_matrix=view_matrix,
-    #                     camera_matrix=camera_matrix,
-    #                     model_matrix=model_matrix,
-    #                     modelview_matrix=modelview_matrix,
-    #                     normal_matrix=normal_matrix,
-    #                     mvp_matrix=mvp_matrix,
-    #                     local_matrix=local_matrix)
     for i, primitive in enumerate(mesh['primitives']):
         draw_primitive(primitive, gltf,
                        projection_matrix=(projection_matrix if i == 0 else None),
@@ -481,28 +484,29 @@ def draw_node(node, gltf,
               projection_matrix=None,
               view_matrix=None,
               camera_matrix=None):
-    model_matrix = node['world_matrix']
-    if view_matrix is None:
-        view_matrix = np.linalg.inv(camera_matrix)
-    model_matrix.dot(view_matrix, out=draw_node.modelview_matrix)
-    draw_node.normal_matrix[...] = np.linalg.inv(draw_node.modelview_matrix[:3,:3])
-    #if projection_matrix is not None:
-    #    projection_matrix.dot(draw_node.modelview_matrix, out=draw_node.mvp_matrix)
     if 'meshes' in node: # GLTF v1.0
         meshes = node['meshes']
     elif 'mesh' in node: # GLTF v2.0
         meshes = [node['mesh']]
     else:
         meshes = []
-    for mesh_name in meshes:
-        draw_mesh(gltf['meshes'][mesh_name], gltf,
-                  projection_matrix=projection_matrix,
-                  view_matrix=view_matrix,
-                  camera_matrix=camera_matrix,
-                  model_matrix=model_matrix,
-                  modelview_matrix=draw_node.modelview_matrix,
-                  normal_matrix=draw_node.normal_matrix)
-                  #mvp_matrix=draw_node.mvp_matrix)
+    if meshes:
+        model_matrix = node['world_matrix']
+        if view_matrix is None:
+            view_matrix = np.linalg.inv(camera_matrix)
+        model_matrix.dot(view_matrix, out=draw_node.modelview_matrix)
+        draw_node.normal_matrix[...] = np.linalg.inv(draw_node.modelview_matrix[:3,:3])
+        #if projection_matrix is not None:
+        #    projection_matrix.dot(draw_node.modelview_matrix, out=draw_node.mvp_matrix)
+        for mesh_name in meshes:
+            draw_mesh(gltf['meshes'][mesh_name], gltf,
+                      projection_matrix=projection_matrix,
+                      view_matrix=view_matrix,
+                      camera_matrix=camera_matrix,
+                      model_matrix=model_matrix,
+                      modelview_matrix=draw_node.modelview_matrix,
+                      normal_matrix=draw_node.normal_matrix)
+                      #mvp_matrix=draw_node.mvp_matrix)
     if 'children' in node:
         for child in node['children']:
             draw_node(gltf['nodes'][child], gltf,
@@ -568,16 +572,3 @@ def update_world_matrices(node, gltf, world_matrix=None):
     if 'children' in node:
         for child in [gltf['nodes'][n] for n in node['children']]:
             update_world_matrices(child, gltf, world_matrix=world_matrix)
-
-
-def find_camera_in_nodes(gltf, nodes):
-    camera = None
-    for node in nodes:
-        if 'camera' in node:
-            return gltf['cameras'][node['camera']], node
-        elif node.get('children', []):
-            camera, camera_node = find_camera_in_nodes(gltf, [gltf['nodes'][n]
-                                                              for n in node.get('children', [])])
-            if camera is not None:
-                return camera, camera_node
-    return camera, None

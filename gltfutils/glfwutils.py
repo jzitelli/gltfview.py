@@ -40,7 +40,6 @@ def setup_glfw(width=800, height=600, double_buffered=False, multisample=None):
 
 def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, multisample=None, clear_color=(0.01, 0.01, 0.013, 0.0)):
     _t0 = time.time()
-    _logger.debug('GLTF contents:\n\n%s\n\n', json.dumps(gltf, indent=2, sort_keys=True))
     version = '1.0'
     generator = 'no generator was specified for this file'
     if 'asset' in gltf:
@@ -92,14 +91,23 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
         else:
             scene = gltf['scenes'][0]
 
-
     nodes = [gltf['nodes'][n] for n in scene['nodes']]
     for node in nodes:
         gltfu.update_world_matrices(node, gltf)
 
-    camera, camera_node = gltfu.find_camera_in_nodes(gltf, nodes)
-    if camera is not None:
-        _logger.info('using camera:\n%s\n%s', camera, camera.__class__)
+    def find_camera_node(gltf, nodes):
+        for n in nodes:
+            if 'camera' in gltf['nodes'][n]:
+                return gltf['nodes'][n]
+            if 'children' in gltf['nodes'][n]:
+                node = find_camera_node(gltf, gltf['nodes'][n]['children'])
+                if node is not None:
+                    return node
+        return None
+    camera_node = find_camera_node(gltf, scene['nodes'])
+    if camera_node is not None:
+        camera = gltf['cameras'][camera_node['camera']]
+        _logger.info('found camera: %s', camera)
         gltfu.calc_projection_matrix(camera, out=projection_matrix)
         camera_world_matrix = camera_node['world_matrix']
     else:
@@ -215,14 +223,11 @@ def setup_controls(camera_world_matrix=None, window=None):
   HTC VIVE CONTROLS: TBD
 
 ''')
-    _MOVE_KEYS = (glfw.KEY_W, glfw.KEY_S, glfw.KEY_A, glfw.KEY_D,
-                  glfw.KEY_Q, glfw.KEY_Z,
-                  glfw.KEY_LEFT, glfw.KEY_RIGHT)
     camera_position = camera_world_matrix[3, :3]
     camera_rotation = camera_world_matrix[:3, :3]
     dposition = np.zeros(3, dtype=np.float32)
     rotation = np.eye(3, dtype=np.float32)
-    move_speed = 2.0
+    move_speed = 200.0
     turn_speed = 0.5
     key_state = defaultdict(bool)
     def on_keydown(window, key, scancode, action, mods):
