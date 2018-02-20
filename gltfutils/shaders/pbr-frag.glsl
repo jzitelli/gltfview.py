@@ -295,10 +295,11 @@ void main()
     float D = microfacetDistribution(pbrInputs);
 
     // Calculation of analytical lighting contribution
-    vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);
-    vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
-    vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
+    // vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);
+    // vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
+    // vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
     // vec3 color = NdotL * u_LightColor * 1.0;
+    vec3 color = NdotL * u_LightColor * diffuse(pbrInputs);
 
     // Calculate lighting contribution from image based lighting source (IBL)
 #ifdef USE_IBL

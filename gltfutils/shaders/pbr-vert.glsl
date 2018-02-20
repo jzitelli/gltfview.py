@@ -13,9 +13,8 @@ attribute vec2 a_UV;
 
 //uniform mat4 u_MVPMatrix;
 uniform mat4 u_ProjectionMatrix;
-uniform mat4 u_ModelMatrix;
+//uniform mat4 u_ModelMatrix;
 uniform mat4 u_ModelViewMatrix;
-uniform mat3 u_NormalMatrix;
 
 varying vec3 v_Position;
 varying vec2 v_UV;
@@ -36,8 +35,8 @@ void main()
 
   #ifdef HAS_NORMALS
   #ifdef HAS_TANGENTS
-  vec3 normalW = normalize(vec3(u_ModelMatrix * vec4(a_Normal.xyz, 0.0)));
-  vec3 tangentW = normalize(vec3(u_ModelMatrix * vec4(a_Tangent.xyz, 0.0)));
+  vec3 normalW = normalize(vec3(u_ModelViewMatrix * vec4(a_Normal.xyz, 0.0)));
+  vec3 tangentW = normalize(vec3(u_ModelViewMatrix * vec4(a_Tangent.xyz, 0.0)));
   //vec3 normalW = normalize(u_NormalMatrix * a_Normal.xyz);
   //vec3 tangentW = normalize(u_NormalMatrix * a_Tangent.xyz);
   vec3 bitangentW = cross(normalW, tangentW) * a_Tangent.w;

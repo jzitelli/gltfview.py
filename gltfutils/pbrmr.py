@@ -30,11 +30,13 @@ _REQUIRED_GLSL_VERT_UNIFS =   ['u_ModelViewMatrix',
                                'u_ModelMatrix']
                                #u_NormalMatrix
                                #u_MVPMatrix
-_REQUIRED_GLSL_FRAG_UNIFS =   ['u_BaseColorFactor'];
+_REQUIRED_GLSL_FRAG_UNIFS =   ['u_BaseColorFactor',
+                               'u_MetallicFactor',
+                               'u_RoughnessFactor'];
 _GLSL_UNIF_TO_DEFINE      =   {'u_DiffuseEnvSampler'       : 'USE_IBL',
                                'u_SpecularEnvSampler'      : 'USE_IBL',
                                #'u_brdfLUT'                 : 'USE_IBL',
-                               'u_BaseColorSampler'        : 'HAS_COLORMAP',
+                               'u_BaseColorSampler'        : 'HAS_BASECOLORMAP',
                                'u_NormalSampler'           : 'HAS_NORMALMAP',
                                'u_NormalScale'             : 'HAS_NORMALMAP',
                                'u_EmissiveSampler'         : 'HAS_EMISSIVEMAP',
@@ -78,16 +80,12 @@ _GLSL_UNIF_PARAMS = {
     'u_Camera': {'type': gl.GL_FLOAT_VEC3},# 'value': [0.0, 0.0, 1.0]},
     'u_LightDirection': {'type': gl.GL_FLOAT_VEC3},
     'u_LightColor': {'type': gl.GL_FLOAT_VEC3}
-    #'u_MetallicRoughnessValues': {'type' : gl.GL_FLOAT_VEC2, 'value': [0.0, 0.0]},
     #'u_brdfLUT': {'type': gl.GL_SAMPLER_2D},
     #'u_ScaleDiffBaseMR': {'type' : gl.GL_FLOAT_VEC4, 'value': [0.0, 0.0, 0.0, 0.0]},
     #'u_ScaleFGDSpec': {'type' : gl.GL_FLOAT_VEC4, 'value': [0.0, 0.0, 0.0, 0.0]},
     #'u_ScaleIBLAmbient': {'type' : gl.GL_FLOAT_VEC4, 'value': [0.0, 0.0, 0.0, 0.0]}
 }
 
-# _GLTF_ATTR_TO_DEFINE = {gltf_attr: _GLSL_ATTR_TO_DEFINE[glsl_attr]
-#                         for glsl_attr, gltf_attr in _GLSL_ATTR_TO_GLTF_ATTR.items()}
-# _DEFINE_TO_GLTF_ATTR = {v: k for k, v in _GLTF_ATTR_TO_DEFINE.items()}
 _GLTF_ATTR_TO_DEFINE = {'NORMAL': 'HAS_NORMALS',
                         'TANGENT': 'HAS_TANGENTS',
                         'TEXCOORD_0': 'HAS_UV'}
@@ -135,8 +133,8 @@ _REQUIRED_GLTF_UNIFS = [_GLSL_UNIF_TO_GLTF_UNIF[unif] for unif in _REQUIRED_GLSL
 _GLTF_UNIF_TO_DEFINE = {gltf_unif: _GLSL_UNIF_TO_DEFINE[glsl_unif]
                         for glsl_unif, gltf_unif in _GLSL_UNIF_TO_GLTF_UNIF.items()
                         if glsl_unif in _GLSL_UNIF_TO_DEFINE}
-_logger.debug('GLTF uniform to src #define:\n\n%s', '\n'.join('%s: %s' % (k, v)
-                                                              for k, v in _GLTF_UNIF_TO_DEFINE.items()))
+# _logger.debug('GLTF uniform to src #define:\n\n%s', '\n'.join('%s: %s' % (k, v)
+#                                                               for k, v in _GLTF_UNIF_TO_DEFINE.items()))
 _DEFINE_TO_GLSL_UNIFS = {define: [item[0] for item in grp]
                          for define, grp in groupby(sorted(_GLSL_UNIF_TO_DEFINE.items(),
                                                            key=lambda item: item[1]),
@@ -157,9 +155,11 @@ def setup_pbrmr_programs(gltf):
     materials = gltf.get('materials', [])
     material_defines = []
     for i, material in enumerate(materials):
-        defines = sorted([_GLSL_UNIF_TO_DEFINE[k]
-                          for k in chain(material.keys(), material.get('pbrMetallicRoughness', {}).keys())
-                          if k in _GLSL_UNIF_TO_DEFINE])
+        material = material.copy()
+        if 'pbrMetallicRoughness' in material:
+            material.update(material.pop('pbrMetallicRoughness'))
+        defines = sorted([_GLTF_UNIF_TO_DEFINE[k]
+                          for k in material.keys() if k in _GLTF_UNIF_TO_DEFINE])
         material_defines.append(defines)
     # scan all primitive attributes to determine all of the unique GLTF techniques (i.e. OpenGL programs)
     # to be defined / compiled to render the scene,
@@ -177,6 +177,7 @@ def setup_pbrmr_programs(gltf):
                 material = gltf['materials'][i_material]
                 _logger.debug('primitive["material"] = %s\nmaterial: %s', i_material, material)
                 prim_defines = [] + material_defines[i_material]
+                _logger.debug('material_defines[i_material] = %s', material_defines[i_material])
                 attributes = primitive.get('attributes', {})
                 _logger.debug('primitive["attributes"] = %s', attributes)
                 for gltf_attr in attributes.keys():
@@ -188,13 +189,11 @@ def setup_pbrmr_programs(gltf):
                     attributes = {glsl_attr: _GLSL_ATTR_TO_GLTF_ATTR[glsl_attr]
                                   for glsl_attr in _REQUIRED_GLSL_ATTRS}
                     attributes.update({_DEFINE_TO_GLSL_ATTR[define]: _DEFINE_TO_GLTF_ATTR[define]
-                                       for define in prim_defines})
+                                       for define in prim_defines if define in _DEFINE_TO_GLSL_ATTR})
                     uniforms = {glsl_unif: _GLSL_UNIF_TO_GLTF_UNIF[glsl_unif]
                                 for glsl_unif in _REQUIRED_GLSL_UNIFS}
                     uniforms.update({glsl_unif: _GLSL_UNIF_TO_GLTF_UNIF[glsl_unif]
-                                     for glsl_unif in chain(_DEFINE_TO_GLSL_UNIFS[define]
-                                                            for define in prim_defines
-                                                            if define in _DEFINE_TO_GLSL_UNIFS)})
+                                     for define in prim_defines for glsl_unif in _DEFINE_TO_GLSL_UNIFS.get(define, [])})
                     parameters = {gltf_attr: _GLSL_ATTR_PARAMS[glsl_attr]
                                   for glsl_attr, gltf_attr in attributes.items()}
                     parameters.update({gltf_unif: _GLSL_UNIF_PARAMS[glsl_unif]
@@ -312,8 +311,8 @@ defined GLTF 1.0 material:
         program['attribute_locations'] = {attribute_name: gl.glGetAttribLocation(program_id,
                                                                                  attribute_name)
                                           for attribute_name in program['attributes']}
-        program['uniform_locations'] = {uniform_name: gl.glGetUniformLocation(program['id'], uniform_name)
-                                        for uniform_name in program['uniforms']}
+        #program['uniform_locations'] = {uniform_name: gl.glGetUniformLocation(program['id'], uniform_name)
+        #                                for uniform_name in program['uniforms']}
         _logger.debug('attribute locations: %s\nuniform locations: %s', program['attribute_locations'], program['uniform_locations'])
         gltf['techniques'][i_technique]['program'] = i_program
         gltf['programs'].append(program)
