@@ -16,8 +16,8 @@
 
 precision highp float;
 
-uniform vec3 u_LightDirection = vec3(0.1, 0.7, 0.22);
-uniform vec3 u_LightColor = vec3(1.0, 0.8, 0.7);
+uniform vec3 u_LightDirection = vec3(0.134, 0.5, 0.26);
+uniform vec3 u_LightColor = vec3(0.95, 0.95, 0.95);
 
 #ifdef USE_IBL
 uniform samplerCube u_DiffuseEnvSampler;
@@ -49,13 +49,9 @@ uniform float u_OcclusionStrength;
 #endif
 
 //uniform vec2 u_MetallicRoughnessValues;
-uniform float u_MetallicFactor = 0.1;
-uniform float u_RoughnessFactor = 0.4;
-
-uniform vec4 u_BaseColorFactor = vec4(1.0, 1.0, 0.0, 1.0);
-
-uniform vec3 u_Camera = vec3(4.00113, 4.63264, -4.31078);
-//uniform vec3 u_Camera = vec3(400.1130065917969, 463.2640075683594, 431.0780334472656);
+uniform float u_MetallicFactor;
+uniform float u_RoughnessFactor;
+uniform vec4 u_BaseColorFactor = vec4(1.0, 1.0, 1.0, 1.0);
 
 // debugging flags used for shader output of intermediate PBR variables
 //uniform vec4 u_ScaleDiffBaseMR;
@@ -153,7 +149,7 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     float mipCount = 9.0; // resolution of 512x512
     float lod = (pbrInputs.perceptualRoughness * mipCount);
     // retrieve a scale and bias to F0. See [1], Figure 3
-    //vec3 brdf = SRGBtoLINEAR(texture2D(u_brdfLUT, vec2(pbrInputs.NdotV, 1.0 - pbrInputs.perceptualRoughness))).rgb;
+    vec3 brdf = SRGBtoLINEAR(texture2D(u_brdfLUT, vec2(pbrInputs.NdotV, 1.0 - pbrInputs.perceptualRoughness))).rgb;
     vec3 diffuseLight = SRGBtoLINEAR(textureCube(u_DiffuseEnvSampler, n)).rgb;
 
 #ifdef USE_TEX_LOD
@@ -163,7 +159,8 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
 #endif
 
     vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
-    vec3 specular = specularLight * (pbrInputs.specularColor * 1.0 + 0.0);
+    //vec3 specular = specularLight * (pbrInputs.specularColor * 1.0 + 0.0);
+    vec3 specular = specularLight * (pbrInputs.specularColor * brdf.x + brdf.y);
 
     // For presentation, this allows us to disable IBL terms
     diffuse *= u_ScaleIBLAmbient.x;
@@ -261,9 +258,10 @@ void main()
     vec3 specularEnvironmentR90 = vec3(1.0, 1.0, 1.0) * reflectance90;
 
     vec3 n = getNormal();                             // normal at surface point
+
+    // TODO: need to apply modelview transform to u_LightDirection or bring back u_Camera uniform
     // vec3 v = normalize(u_Camera - v_Position);        // Vector from surface point to camera
     vec3 v = normalize(-v_Position);
-
     vec3 l = normalize(u_LightDirection);             // Vector from surface point to light
     vec3 h = normalize(l+v);                          // Half vector between both l and v
     vec3 reflection = -normalize(reflect(v, n));
@@ -295,11 +293,11 @@ void main()
     float D = microfacetDistribution(pbrInputs);
 
     // Calculation of analytical lighting contribution
-    // vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);
-    // vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
-    // vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
+    vec3 diffuseContrib = (1.0 - F) * diffuse(pbrInputs);
+    vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
+    vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
     // vec3 color = NdotL * u_LightColor * 1.0;
-    vec3 color = NdotL * u_LightColor * diffuse(pbrInputs);
+    //vec3 color = NdotL * u_LightColor * diffuse(pbrInputs);
 
     // Calculate lighting contribution from image based lighting source (IBL)
 #ifdef USE_IBL

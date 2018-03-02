@@ -1,7 +1,6 @@
 from sys import stdout
 from collections import defaultdict
 import time
-import json
 import logging
 
 import numpy as np
@@ -118,7 +117,8 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
     # sort nodes from front to back to avoid overdraw (assuming opaque objects):
     nodes = sorted(nodes, key=lambda node: np.linalg.norm(camera_world_matrix[3, :3] - node['world_matrix'][3, :3]))
 
-    process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window)
+    process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window,
+                                   move_speed=(170.0 if version.startswith('2.') else 1.7))
 
     _t1 = time.time()
     _dt = _t1 - _t0
@@ -134,15 +134,18 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
     _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame); stdout.flush()
 
     _logger.info('''STARTING RENDER LOOP...'''); stdout.flush()
-    import gc; gc.collect()
+
+    import gc; gc.collect() # does it do anything?
 
     if openvr and OpenVRRenderer is not None:
         vr_renderer = OpenVRRenderer(multisample=multisample, poll_tracked_device_frequency=90)
-        render_stats = vr_render_loop(vr_renderer=vr_renderer, process_input=process_input, window=window,
-                                      window_size=window_size, gltf=gltf, nodes=nodes)
+        render_stats = vr_render_loop(vr_renderer=vr_renderer, process_input=process_input,
+                                      window=window, window_size=window_size,
+                                      gltf=gltf, nodes=nodes)
         vr_renderer.shutdown()
     else:
-        render_stats = render_loop(process_input=process_input, window=window, window_size=window_size,
+        render_stats = render_loop(process_input=process_input,
+                                   window=window, window_size=window_size,
                                    gltf=gltf, nodes=nodes,
                                    camera_world_matrix=camera_world_matrix,
                                    projection_matrix=projection_matrix)
@@ -151,11 +154,13 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
 
 %s
 ''', '\n'.join('  %21s: %s' % (k, v) for k, v in render_stats.items()))
+
     glfw.DestroyWindow(window)
     glfw.Terminate()
 
 
-def render_loop(process_input=None, window=None, gltf=None, nodes=None, window_size=None,
+def render_loop(process_input=None, window=None, window_size=None,
+                gltf=None, nodes=None,
                 camera_world_matrix=None, projection_matrix=None):
     nframes = 0
     dt_max = 0.0
@@ -171,7 +176,7 @@ def render_loop(process_input=None, window=None, gltf=None, nodes=None, window_s
                projection_matrix=projection_matrix)
         nframes += 1
         glfw.SwapBuffers(window)
-    return {'NUM FRAMES RENDERER': nframes,
+    return {'NUM FRAMES RENDERED': nframes,
             'AVERAGE FPS': nframes / (t - st),
             'MAX FRAME RENDER TIME': dt_max}
 
@@ -191,7 +196,8 @@ def render(gltf, nodes, window_size,
                         **frame_data)
 
 
-def vr_render_loop(vr_renderer=None, process_input=None, window=None, window_size=None,
+def vr_render_loop(vr_renderer=None, process_input=None,
+                   window=None, window_size=None,
                    gltf=None, nodes=None):
     gltfu.num_draw_calls = 0
     nframes = 0
@@ -212,7 +218,8 @@ def vr_render_loop(vr_renderer=None, process_input=None, window=None, window_siz
             'MAX FRAME RENDER TIME': dt_max}
 
 
-def setup_controls(camera_world_matrix=None, window=None):
+def setup_controls(window=None, camera_world_matrix=None,
+                   move_speed=2.0, turn_speed=0.5):
     _logger.info('''
 
   KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
@@ -227,8 +234,6 @@ def setup_controls(camera_world_matrix=None, window=None):
     camera_rotation = camera_world_matrix[:3, :3]
     dposition = np.zeros(3, dtype=np.float32)
     rotation = np.eye(3, dtype=np.float32)
-    move_speed = 200.0
-    turn_speed = 0.5
     key_state = defaultdict(bool)
     def on_keydown(window, key, scancode, action, mods):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:

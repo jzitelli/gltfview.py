@@ -1,9 +1,9 @@
 import os.path
 import base64
 from ctypes import c_void_p
-try: # python 3.3 or later
+try:
     from types import MappingProxyType
-except ImportError as err:
+except ImportError:
     MappingProxyType = dict
 import re
 import logging
@@ -133,7 +133,7 @@ def setup_textures(gltf, uri_path):
         gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_S, sampler.get('wrapS', 10497))
         gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_T, sampler.get('wrapT', 10497))
         sampler['id'] = sampler_id
-        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+        #gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
         if 'type' not in texture:
             texture['type'] = gl.GL_UNSIGNED_BYTE
         if texture['type'] != gl.GL_UNSIGNED_BYTE:
@@ -466,7 +466,7 @@ def draw_mesh(mesh, gltf,
               model_matrix=None,
               modelview_matrix=None,
               normal_matrix=None,
-              #mvp_matrix=None,
+              mvp_matrix=None,
               local_matrix=None):
     for i, primitive in enumerate(mesh['primitives']):
         draw_primitive(primitive, gltf,
@@ -513,9 +513,9 @@ def draw_node(node, gltf,
                       projection_matrix=projection_matrix,
                       view_matrix=view_matrix,
                       camera_matrix=camera_matrix)
-draw_node.modelview_matrix = np.empty((4,4), dtype=np.float32)
-draw_node.normal_matrix = np.eye(3, dtype=np.float32)
-#draw_node.mvp_matrix = np.empty((4,4), dtype=np.float32)
+draw_node.modelview_matrix = np.eye(4, dtype=np.float32)
+draw_node.normal_matrix    = np.eye(3, dtype=np.float32)
+draw_node.mvp_matrix       = np.eye(4, dtype=np.float32)
 
 
 def calc_projection_matrix(camera, out=None):

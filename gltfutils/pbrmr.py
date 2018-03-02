@@ -15,6 +15,45 @@ _EGA_FRAG_SHADER_SRC_PATH = os.path.join(_here, 'shaders', 'ega-frag.glsl')
 _VERT_SHADER_SRC_PATH = os.path.join(_here, 'shaders', 'pbr-vert.glsl')
 _FRAG_SHADER_SRC_PATH = os.path.join(_here, 'shaders', 'pbr-frag.glsl')
 
+_GLSL_ATTR_TO_GLTF_ATTR = {'a_Position': 'POSITION',
+                           'a_Normal'  : 'NORMAL',
+                           'a_Tangent' : 'TANGENT',
+                           'a_UV'      : 'TEXCOORD_0'}
+_GLSL_UNIF_TO_GLTF_UNIF = {
+    # metallic-roughness uniforms:
+    'u_BaseColorFactor'          : 'baseColorFactor',
+    'u_BaseColorSampler'         : 'baseColorTexture',
+    'u_MetallicFactor'           : 'metallicFactor',
+    'u_RoughnessFactor'          : 'roughnessFactor',
+    'u_MetallicRoughnessSampler' : 'metallicRoughnessTexture',
+    'u_NormalSampler'            : 'normalTexture',
+    'u_NormalScale'              : 'normalScale',
+    'u_OcclusionSampler'         : 'occlusionTexture',
+    'u_OcclusionStrength'        : 'occlusionStrength',
+    # specular-glossiness uniforms:
+    'u_DiffuseEnvSampler'        : 'diffuseTexture',
+    'u_DiffuseFactor'            : 'diffuseFactor',
+    'u_SpecularEnvSampler'       : 'specularGlossinessTexture',
+    'u_SpecularFactor'           : 'specularFactor',
+    'u_GlossinessFactor'         : 'glossinessFactor',
+    'u_EmissiveSampler'          : 'emissiveTexture',
+    'u_EmissiveFactor'           : 'emissiveFactor',
+    # general fragment shader uniforms:
+    'u_LightDirection'           : 'lightDirection',
+    'u_LightColor'               : 'lightColor',
+    'u_Camera'                   : 'cameraPosition',
+    # 'u_ScaleDiffBaseMR'          : 'scaleDiffBaseMR',
+    # vertex shader uniforms (should map to semantic):
+    'u_ModelMatrix'              : 'u_ModelMatrix',
+    'u_ModelViewMatrix'          : 'u_ModelViewMatrix',
+    'u_ViewMatrix'               : 'u_ViewMatrix',
+    'u_ProjectionMatrix'         : 'u_ProjectionMatrix',
+    'u_MVPMatrix'                : 'u_MVPMatrix',
+    'u_NormalMatrix'             : 'u_NormalMatrix',
+    'u_CameraMatrix'             : 'u_CameraMatrix',
+    'u_LocalMatrix'              : 'u_LocalMatrix'
+}
+
 _REQUIRED_GLSL_ATTRS = ['a_Position']
 _GLSL_ATTR_TO_DEFINE = {'a_Normal' : 'HAS_NORMALS',
                         'a_Tangent': 'HAS_TANGENTS',
@@ -25,6 +64,7 @@ _GLSL_ATTR_PARAMS = {
     'a_UV'      : {'type': gl.GL_FLOAT_VEC2, 'semantic': 'TEXCOORD_0'},
     'a_Tangent' : {'type': gl.GL_FLOAT_VEC4, 'semantic': 'TANGENT'}
 }
+
 _REQUIRED_GLSL_VERT_UNIFS =   ['u_ModelViewMatrix',
                                'u_ProjectionMatrix',
                                'u_ModelMatrix']
@@ -91,44 +131,7 @@ _GLTF_ATTR_TO_DEFINE = {'NORMAL': 'HAS_NORMALS',
                         'TEXCOORD_0': 'HAS_UV'}
 _DEFINE_TO_GLSL_ATTR = {define: attr for attr, define in _GLSL_ATTR_TO_DEFINE.items()}
 _DEFINE_TO_GLTF_ATTR = {define: attr for attr, define in _GLTF_ATTR_TO_DEFINE.items()}
-_GLSL_ATTR_TO_GLTF_ATTR = {'a_Position': 'POSITION',
-                           'a_Normal'  : 'NORMAL',
-                           'a_Tangent' : 'TANGENT',
-                           'a_UV'      : 'TEXCOORD_0'}
-_GLSL_UNIF_TO_GLTF_UNIF = {
-    # metallic-roughness uniforms:
-    'u_BaseColorFactor'          : 'baseColorFactor',
-    'u_BaseColorSampler'         : 'baseColorTexture',
-    'u_MetallicFactor'           : 'metallicFactor',
-    'u_RoughnessFactor'          : 'roughnessFactor',
-    'u_MetallicRoughnessSampler' : 'metallicRoughnessTexture',
-    'u_NormalSampler'            : 'normalTexture',
-    'u_NormalScale'              : 'normalScale',
-    'u_OcclusionSampler'         : 'occlusionTexture',
-    'u_OcclusionStrength'        : 'occlusionStrength',
-    # specular-glossiness uniforms:
-    'u_DiffuseEnvSampler'        : 'diffuseTexture',
-    'u_DiffuseFactor'            : 'diffuseFactor',
-    'u_SpecularEnvSampler'       : 'specularGlossinessTexture',
-    'u_SpecularFactor'           : 'specularFactor',
-    'u_GlossinessFactor'         : 'glossinessFactor',
-    'u_EmissiveSampler'          : 'emissiveTexture',
-    'u_EmissiveFactor'           : 'emissiveFactor',
-    # general fragment shader uniforms:
-    'u_LightDirection'           : 'lightDirection',
-    'u_LightColor'               : 'lightColor',
-    'u_Camera'                   : 'cameraPosition',
-    #'u_ScaleDiffBaseMR'          : 'scaleDiffBaseMR',
-    # vertex shader uniforms (should map to semantic):
-    'u_ModelMatrix'              : 'u_ModelMatrix',
-    'u_ModelViewMatrix'          : 'u_ModelViewMatrix',
-    'u_ViewMatrix'               : 'u_ViewMatrix',
-    'u_ProjectionMatrix'         : 'u_ProjectionMatrix',
-    'u_MVPMatrix'                : 'u_MVPMatrix',
-    'u_NormalMatrix'             : 'u_NormalMatrix',
-    'u_CameraMatrix'             : 'u_CameraMatrix',
-    'u_LocalMatrix'              : 'u_LocalMatrix'
-}
+
 _REQUIRED_GLTF_UNIFS = [_GLSL_UNIF_TO_GLTF_UNIF[unif] for unif in _REQUIRED_GLSL_UNIFS]
 _GLTF_UNIF_TO_DEFINE = {gltf_unif: _GLSL_UNIF_TO_DEFINE[glsl_unif]
                         for glsl_unif, gltf_unif in _GLSL_UNIF_TO_GLTF_UNIF.items()
@@ -243,17 +246,17 @@ defined GLTF 1.0 material:
     gltf['programs'] = []
     for i_program, (defines, i_technique) in enumerate(defines_to_technique.items()):
         v_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [vert_src])
-#         _logger.debug('''compiling vertex shader...:
+        _logger.debug('''compiling vertex shader...:
 
-# ================================================================================
+================================================================================
 
-# %s
+%s
 
-# ================================================================================
+================================================================================
 
-# ''', '\n'.join(ln for ln in
-#                (ln.strip() for ln in v_src.split('\n'))
-#                if ln))
+''', '\n'.join(ln for ln in
+               (ln.strip() for ln in v_src.split('\n'))
+               if ln))
         vert_shader_id = gl.glCreateShader(gl.GL_VERTEX_SHADER)
         gl.glShaderSource(vert_shader_id, v_src)
         gl.glCompileShader(vert_shader_id)
@@ -261,38 +264,39 @@ defined GLTF 1.0 material:
             raise Exception('FAILED to compile vertex shader %s:\n%s' % (i, gl.glGetShaderInfoLog(vert_shader_id).decode()))
         #_logger.debug('..successfully compiled vertex shader %s', vert_shader_id)
         f_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [frag_src])
-#         _logger.debug('''...successfully compiled vertex shader.
+        _logger.debug('''...successfully compiled vertex shader.
 
-# compiling fragment shader...:
+compiling fragment shader...:
 
-# ================================================================================
+================================================================================
 
-# %s
+%s
 
-# ================================================================================
+================================================================================
 
-# ''', '\n'.join(ln for ln in
-#                (ln.strip() for ln in f_src.split('\n'))
-#                if ln))
+''', '\n'.join(ln for ln in
+               (ln.strip() for ln in f_src.split('\n'))
+               if ln))
         frag_shader_id = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
         gl.glShaderSource(frag_shader_id, f_src)
         gl.glCompileShader(frag_shader_id)
         if not gl.glGetShaderiv(frag_shader_id, gl.GL_COMPILE_STATUS):
             raise Exception('FAILED to compile fragment shader %s:\n%s' % (i, gl.glGetShaderInfoLog(frag_shader_id).decode()))
-#         _logger.debug('''...successfully compiled fragment shader %s
+        _logger.debug('''...successfully compiled fragment shader %s
 
-# linking program %d...:
-#   attributes: %s
-#   uniforms: %s
+linking program %d...:
+  attributes: %s
+  uniforms: %s
 
-# ''', frag_shader_id, i_program, attributes, uniforms)
+''', frag_shader_id, i_program, attributes, uniforms)
         program_id = gl.glCreateProgram()
         attributes = _REQUIRED_GLSL_ATTRS + [_DEFINE_TO_GLSL_ATTR[define]
                                              for define in defines
                                              if define in _DEFINE_TO_GLSL_ATTR]
-        uniforms = _REQUIRED_GLSL_UNIFS + list(chain.from_iterable(_DEFINE_TO_GLSL_UNIFS[define]
-                                                                   for define in defines
-                                                                   if define in _DEFINE_TO_GLSL_UNIFS))
+        uniforms = _REQUIRED_GLSL_UNIFS \
+            + list(chain.from_iterable(_DEFINE_TO_GLSL_UNIFS[define]
+                                       for define in defines
+                                       if define in _DEFINE_TO_GLSL_UNIFS))
         program = {
             'id': program_id,
             'attributes': attributes,
