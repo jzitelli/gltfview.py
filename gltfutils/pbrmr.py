@@ -1,6 +1,7 @@
 import os.path
-from itertools import chain, groupby
+from itertools import groupby
 import json
+import base64
 import logging
 
 import OpenGL.GL as gl
@@ -191,13 +192,14 @@ def setup_pbrmr_programs(gltf):
                                   for glsl_attr, gltf_attr in attributes.items()}
                     parameters.update({gltf_unif: _GLSL_UNIF_PARAMS[glsl_unif]
                                        for glsl_unif, gltf_unif in uniforms.items()})
+                    i_technique = len(techniques)
                     technique = {
                         "states": {"enable": [2929, 2884]},
                         "attributes": attributes,
                         "uniforms": uniforms,
                         "parameters": parameters
                     }
-                    defines_to_technique[key] = len(techniques)
+                    defines_to_technique[key] = i_technique
                     techniques.append(technique)
                     _logger.debug('''defined GLTF 1.0 technique for PBRMR material configuration [ %s ]:
 
@@ -209,15 +211,15 @@ def setup_pbrmr_programs(gltf):
                 if material_key not in technique_and_material_to_technique_material:
                     values = material.copy()
                     if 'pbrMetallicRoughness' in values:
-                        pbr = values.pop('pbrMetallicRoughness')
-                        values.update(pbr)
+                        pbr_values = values.pop('pbrMetallicRoughness')
+                        values.update(pbr_values)
                     for k, v in list(values.items()):
                         if k not in _ALL_GLTF_UNIFS:
                             values.pop(k)
                         if k.endswith('Texture'):
                             values[k] = v['index']
                     technique_material = {
-                        'name': material.get('name', 'PBRMR material %s' % i_material) + '-%d' % i_technique,
+                        'name': material.get('name', 'PBRMR material %s, technique %d' % (i_material, defines_to_technique[key])),
                         'values': values,
                         'technique': defines_to_technique[key]
                     }
@@ -234,57 +236,24 @@ def setup_pbrmr_programs(gltf):
     _logger.debug('number of techniques defined = %d, number of materials defined = %d',
                   len(techniques), len(technique_materials))
 
-
-    # TODO: just use existing 1.0 functionality:
-    gltf['programs'] = []
+    gltf['programs'] = {}
+    gltf['shaders'] = {}
     for i_program, (defines, i_technique) in enumerate(defines_to_technique.items()):
         v_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [vert_src])
-        vert_shader_id = gl.glCreateShader(gl.GL_VERTEX_SHADER)
-        gl.glShaderSource(vert_shader_id, v_src)
-        gl.glCompileShader(vert_shader_id)
-        if not gl.glGetShaderiv(vert_shader_id, gl.GL_COMPILE_STATUS):
-            raise Exception('FAILED to compile technique %d vertex shader:\n%s' %
-                            (i_technique, gl.glGetShaderInfoLog(vert_shader_id).decode()))
-        _logger.debug('''...successfully compiled technique %d vertex shader
-
-compiling technique %d fragment shader...''', i_technique, i_technique)
         f_src = '\n'.join(['#version 130'] + ['#define %s 1' % define for define in defines] + [frag_src])
-        frag_shader_id = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
-        gl.glShaderSource(frag_shader_id, f_src)
-        gl.glCompileShader(frag_shader_id)
-        if not gl.glGetShaderiv(frag_shader_id, gl.GL_COMPILE_STATUS):
-            raise Exception('FAILED to compile technique %d fragment shader:\n%s' %
-                            (i_technique, gl.glGetShaderInfoLog(frag_shader_id).decode()))
-        _logger.debug('''...successfully compiled technique %d fragment shader
-
-linking program %d...:
-  attributes: %s
-  uniforms: %s''', i_technique, i_program, attributes, uniforms)
-        program_id = gl.glCreateProgram()
+        vert_shader_index = 'technique-%d-vert' % i_technique
+        frag_shader_index = 'technique-%d-frag' % i_technique
+        gltf['shaders'][vert_shader_index] = {'uri': 'data:text/plain;base64,' + base64.b64encode(v_src.encode()).decode(),
+                                              'type': gl.GL_VERTEX_SHADER}
+        gltf['shaders'][frag_shader_index] = {'uri': 'data:text/plain;base64,' + base64.b64encode(f_src.encode()).decode(),
+                                              'type': gl.GL_FRAGMENT_SHADER}
         attributes = _REQUIRED_GLSL_ATTRS + [_DEFINE_TO_GLSL_ATTR[define]
                                              for define in defines if define in _DEFINE_TO_GLSL_ATTR]
-        uniforms = _REQUIRED_GLSL_UNIFS \
-            + list(chain.from_iterable(_DEFINE_TO_GLSL_UNIFS[define]
-                                       for define in defines if define in _DEFINE_TO_GLSL_UNIFS))
-        program = {
-            'id': program_id,
-            'attributes': attributes,
-            'uniforms': uniforms
-        }
-        gl.glAttachShader(program_id, vert_shader_id)
-        gl.glAttachShader(program_id, frag_shader_id)
-        gl.glLinkProgram(program_id)
-        gl.glDetachShader(program_id, vert_shader_id)
-        gl.glDetachShader(program_id, frag_shader_id)
-        if not gl.glGetProgramiv(program_id, gl.GL_LINK_STATUS):
-            raise Exception('FAILED to link program %s:\n%s' %
-                            (i_program, gl.glGetProgramInfoLog(program_id).decode()))
-        _logger.debug('...successfully linked program %s', i_program)
-        program['attribute_locations'] = {attribute_name: gl.glGetAttribLocation(program_id, attribute_name)
-                                          for attribute_name in program['attributes']}
-        program['uniform_locations'] = {uniform_name: gl.glGetUniformLocation(program_id, uniform_name)
-                                        for uniform_name in program['uniforms']}
-        _logger.debug('attribute locations: %s\nuniform locations: %s',
-                      program['attribute_locations'], program['uniform_locations'])
+        uniforms = _REQUIRED_GLSL_UNIFS + [glsl_unif for define in defines if define in _DEFINE_TO_GLSL_UNIFS
+                                           for glsl_unif in _DEFINE_TO_GLSL_UNIFS[define]]
+        program = {'vertexShader': vert_shader_index,
+                   'fragmentShader': frag_shader_index,
+                   'attributes': attributes,
+                   'uniforms': uniforms}
+        gltf['programs'][i_program] = program
         gltf['techniques'][i_technique]['program'] = i_program
-        gltf['programs'].append(program)

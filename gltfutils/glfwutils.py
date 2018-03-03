@@ -53,11 +53,13 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
 
     GENERATOR: %s
 ''', version, generator)
+
     if window_size is None:
         window_size = [800, 600]
+    else:
+        window_size = list(window_size)
     window = setup_glfw(width=window_size[0], height=window_size[1],
-                        double_buffered=not openvr,
-                        multisample=multisample)
+                        double_buffered=not openvr, multisample=multisample)
 
     projection_matrix = np.zeros((4,4), dtype=np.float32)
     camera = None
@@ -85,6 +87,8 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
 
     elif version.startswith('2.'):
         gltfu.setup_programs_v2(gltf)
+        shader_ids = gltfu.setup_shaders(gltf, uri_path)
+        gltfu.setup_programs(gltf, shader_ids)
         gltfu.setup_textures_v2(gltf, uri_path)
         gltfu.setup_buffers_v2(gltf, uri_path)
         if scene_name and scene_name < len(gltf.get('scenes', [])):

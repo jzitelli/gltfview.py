@@ -97,30 +97,16 @@ def load_images(gltf, uri_path):
     returning a dict mapping GLTF image to loaded PIL.Image."""
     # TODO: support data URIs
     pil_images = {}
-    if 'images' in gltf and isinstance(gltf['images'], list):
-        return load_images_v2(gltf, uri_path)
-    for image_name, image in gltf.get('images', {}).items():
+    images = gltf.get('images', {})
+    if isinstance(images, list):
+        images = {i: image for i, image in enumerate(images)}
+    for image_name, image in images.items():
         filename = os.path.join(uri_path, image['uri'])
         pil_image = Image.open(filename)
         if pil_image.mode == 'P':
             pil_image = pil_image.convert(pil_image.palette.mode)
         pil_images[filename] = pil_image
-        _logger.debug('loaded image "%s" from "%s"', image_name, filename)
-    return pil_images
-
-
-def load_images_v2(gltf, uri_path):
-    """Like ``load_images``, but for GLTF version 2.0."""
-    pil_images = {}
-    for i, image in enumerate(gltf.get('images', [])):
-        filename = os.path.join(uri_path, image['uri'])
-        pil_image = Image.open(filename)
-        if pil_image.mode == 'P':
-            pil_image = pil_image.convert(pil_image.palette.mode)
-        pil_images[filename] = pil_image
-        _logger.debug('loaded image %s from "%s"',
-                      i if 'name' not in image else '%d ("%s")' % (i, image['name']),
-                      filename)
+        _logger.debug('loaded image %s from "%s"', image_name, filename)
     return pil_images
 
 
@@ -540,11 +526,37 @@ draw_node.normal_matrix    = np.eye(3, dtype=np.float32)
 draw_node.mvp_matrix       = np.eye(4, dtype=np.float32)
 
 
-def calc_projection_matrix(camera, out=None):
+def update_world_matrices(node, gltf, world_matrix=None):
+    if 'matrix' not in node:
+        matrix = np.eye(4, dtype=np.float32)
+        if 'rotation' in node:
+            matrix[:3,:3] = set_matrix_from_quaternion(node['rotation']).T
+            matrix[:3, 0] *= node['scale'][0]
+            matrix[:3, 1] *= node['scale'][1]
+            matrix[:3, 2] *= node['scale'][2]
+            matrix[:3, 3] = node['translation']
+    else:
+        matrix = np.array(node['matrix'], dtype=np.float32).reshape((4, 4)).T
+        node['matrix'] = np.ascontiguousarray(matrix)
+    if world_matrix is None:
+        world_matrix = matrix
+    else:
+        world_matrix = world_matrix.dot(matrix)
+    node['world_matrix'] = np.ascontiguousarray(world_matrix.T)
+    if 'children' in node:
+        for child in [gltf['nodes'][n] for n in node['children']]:
+            update_world_matrices(child, gltf, world_matrix=world_matrix)
+
+
+def calc_projection_matrix(camera, out=None, **kwargs):
     if 'perspective' in camera:
-        return calc_perspective_projection(**camera['perspective'], out=out)
+        _kwargs = dict(camera['perspective'])
+        _kwargs.update(kwargs)
+        return calc_perspective_projection(**_kwargs, out=out)
     elif 'orthographic' in camera:
-        return calc_orthographic_projection(**camera['orthographic'], out=out)
+        _kwargs = dict(camera['orthographic'])
+        _kwargs.update(kwargs)
+        return calc_orthographic_projection(**_kwargs, out=out)
     else:
         raise Exception('camera does not have "perspective" or "orthographic" property')
 
@@ -572,25 +584,3 @@ def calc_orthographic_projection(xmag=1, ymag=1, znear=0.01, zfar=100.0,
                         [  0,   0, 2/(n-f), (f+n)/(n-f)],
                         [  0,   0,       0,           1]]))
     return out
-
-
-def update_world_matrices(node, gltf, world_matrix=None):
-    if 'matrix' not in node:
-        matrix = np.eye(4, dtype=np.float32)
-        if 'rotation' in node:
-            matrix[:3,:3] = set_matrix_from_quaternion(node['rotation']).T
-            matrix[:3, 0] *= node['scale'][0]
-            matrix[:3, 1] *= node['scale'][1]
-            matrix[:3, 2] *= node['scale'][2]
-            matrix[:3, 3] = node['translation']
-    else:
-        matrix = np.array(node['matrix'], dtype=np.float32).reshape((4, 4)).T
-        node['matrix'] = np.ascontiguousarray(matrix)
-    if world_matrix is None:
-        world_matrix = matrix
-    else:
-        world_matrix = world_matrix.dot(matrix)
-    node['world_matrix'] = np.ascontiguousarray(world_matrix.T)
-    if 'children' in node:
-        for child in [gltf['nodes'][n] for n in node['children']]:
-            update_world_matrices(child, gltf, world_matrix=world_matrix)
