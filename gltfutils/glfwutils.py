@@ -67,10 +67,11 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
         window_size[:] = width, height
         gl.glViewport(0, 0, window_size[0], window_size[1])
         if camera is None:
-            gltfu.calc_perspective_projection(aspectRatio=window_size[0] / max(5, window_size[1]),
-                                              out=projection_matrix)
+            gltfu.calc_perspective_projection(out=projection_matrix,
+                                              aspectRatio=window_size[0] / max(5, window_size[1]))
         else:
-            gltfu.calc_projection_matrix(camera, out=projection_matrix)
+            gltfu.calc_projection_matrix(camera, out=projection_matrix,
+                                         aspectRatio=window_size[0] / max(5, window_size[1]))
     glfw.SetWindowSizeCallback(window, on_resize)
 
     gl.glClearColor(*clear_color)
