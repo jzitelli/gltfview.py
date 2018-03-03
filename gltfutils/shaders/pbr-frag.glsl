@@ -22,11 +22,11 @@ uniform vec3 u_LightColor = vec3(0.95, 0.95, 0.95);
 #ifdef USE_IBL
 uniform samplerCube u_DiffuseEnvSampler;
 uniform samplerCube u_SpecularEnvSampler;
-//uniform vec4 u_ScaleIBLAmbient;
 uniform vec4 u_DiffuseFactor;
 uniform vec3 u_SpecularFactor;
 uniform float u_GlossinessFactor;
-//uniform sampler2D u_brdfLUT;
+uniform sampler2D u_brdfLUT;
+//uniform vec4 u_ScaleIBLAmbient;
 #endif
 
 #ifdef HAS_BASECOLORMAP
@@ -51,7 +51,7 @@ uniform float u_OcclusionStrength;
 //uniform vec2 u_MetallicRoughnessValues;
 uniform float u_MetallicFactor;
 uniform float u_RoughnessFactor;
-uniform vec4 u_BaseColorFactor = vec4(1.0, 1.0, 1.0, 1.0);
+uniform vec4 u_BaseColorFactor;
 
 // debugging flags used for shader output of intermediate PBR variables
 //uniform vec4 u_ScaleDiffBaseMR;
@@ -159,12 +159,11 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
 #endif
 
     vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
-    //vec3 specular = specularLight * (pbrInputs.specularColor * 1.0 + 0.0);
     vec3 specular = specularLight * (pbrInputs.specularColor * brdf.x + brdf.y);
 
     // For presentation, this allows us to disable IBL terms
-    diffuse *= u_ScaleIBLAmbient.x;
-    specular *= u_ScaleIBLAmbient.y;
+    // diffuse *= u_ScaleIBLAmbient.x;
+    // specular *= u_ScaleIBLAmbient.y;
 
     return diffuse + specular;
 }

@@ -37,7 +37,9 @@ def setup_glfw(width=800, height=600, double_buffered=False, multisample=None):
     return window
 
 
-def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, multisample=None, clear_color=(0.01, 0.01, 0.013, 0.0)):
+def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=None,
+              clear_color=(0.01, 0.01, 0.013, 0.0),
+              openvr=False, nframes=None):
     _t0 = time.time()
     version = '1.0'
     generator = 'no generator was specified for this file'
@@ -131,9 +133,11 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
            camera_world_matrix=camera_world_matrix,
            projection_matrix=projection_matrix)
     num_draw_calls_per_frame = gltfu.num_draw_calls
-    _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame); stdout.flush()
+    _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame)
 
-    _logger.info('''STARTING RENDER LOOP...'''); stdout.flush()
+    _logger.info('''STARTING RENDER LOOP%s...''',
+                 ' (RENDERING %s FRAMES)' % nframes if nframes is not None else '')
+    stdout.flush()
 
     import gc; gc.collect() # does it do anything?
 
@@ -148,7 +152,8 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
                                    window=window, window_size=window_size,
                                    gltf=gltf, nodes=nodes,
                                    camera_world_matrix=camera_world_matrix,
-                                   projection_matrix=projection_matrix)
+                                   projection_matrix=projection_matrix,
+                                   nframes=nframes)
 
     _logger.info('''QUITING...
 
@@ -161,11 +166,12 @@ def view_gltf(gltf, uri_path, scene_name=None, openvr=False, window_size=None, m
 
 def render_loop(process_input=None, window=None, window_size=None,
                 gltf=None, nodes=None,
-                camera_world_matrix=None, projection_matrix=None):
-    nframes = 0
+                camera_world_matrix=None, projection_matrix=None,
+                nframes=None):
+    _nframes = 0
     dt_max = 0.0
     lt = st = glfw.GetTime()
-    while not glfw.WindowShouldClose(window):
+    while not glfw.WindowShouldClose(window) and _nframes != nframes:
         t = glfw.GetTime()
         dt = t - lt
         lt = t
@@ -174,10 +180,10 @@ def render_loop(process_input=None, window=None, window_size=None,
         render(gltf, nodes, window_size,
                camera_world_matrix=camera_world_matrix,
                projection_matrix=projection_matrix)
-        nframes += 1
+        _nframes += 1
         glfw.SwapBuffers(window)
-    return {'NUM FRAMES RENDERED': nframes,
-            'AVERAGE FPS': nframes / (t - st),
+    return {'NUM FRAMES RENDERED': _nframes,
+            'AVERAGE FPS': _nframes / (t - st),
             'MAX FRAME RENDER TIME': dt_max}
 
 

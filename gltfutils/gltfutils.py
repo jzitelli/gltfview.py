@@ -47,7 +47,7 @@ _UNIFORM_DECL_RE =   re.compile(r"uniform\s+(?P<type_spec>\w+)\s+(?P<uniform_nam
 
 
 def setup_shaders(gltf, uri_path):
-    """Loads and compiles all shaders defined or referenced in the given gltf"""
+    """Loads and compiles all shaders defined or referenced in the given gltf."""
     shader_ids = {}
     for shader_name, shader in gltf['shaders'].items():
         uri = shader['uri']
@@ -69,6 +69,8 @@ def setup_shaders(gltf, uri_path):
 
 
 def setup_programs(gltf, shader_ids):
+    """Creates and links OpenGL programs for the input gltf dict, given the mapping
+    from GLTF shader to OpenGL handle of the compiled vertex / fragment shaders."""
     for program_name, program in gltf['programs'].items():
         program_id = gl.glCreateProgram()
         gl.glAttachShader(program_id, shader_ids[program['vertexShader']])
@@ -86,10 +88,13 @@ def setup_programs(gltf, shader_ids):
 
 
 def setup_programs_v2(gltf):
+    """Like ``setup_programs``, but for GLTF version 2.0."""
     pbrmr.setup_pbrmr_programs(gltf)
 
 
 def load_images(gltf, uri_path):
+    """Loads all images referenced in the input gltf dict,
+    returning a dict mapping GLTF image to loaded PIL.Image."""
     # TODO: support data URIs
     pil_images = {}
     if 'images' in gltf and isinstance(gltf['images'], list):
@@ -105,6 +110,7 @@ def load_images(gltf, uri_path):
 
 
 def load_images_v2(gltf, uri_path):
+    """Like ``load_images``, but for GLTF version 2.0."""
     pil_images = {}
     for i, image in enumerate(gltf.get('images', [])):
         filename = os.path.join(uri_path, image['uri'])
@@ -119,6 +125,9 @@ def load_images_v2(gltf, uri_path):
 
 
 def setup_textures(gltf, uri_path):
+    """
+    Creates within the current GL context all textures referenced in the input gltf dict.
+    """
     pil_images = load_images(gltf, uri_path)
     texture_id_0 = gl.glGenTextures(len(gltf.get('textures', {})))
     for i, (texture_name, texture) in enumerate(gltf.get('textures', {}).items()):
@@ -141,13 +150,16 @@ def setup_textures(gltf, uri_path):
         if 'type' not in texture:
             texture['type'] = gl.GL_UNSIGNED_BYTE
         if texture['type'] != gl.GL_UNSIGNED_BYTE:
-            _logger.warn('you are trying to use a texture with property "type" set to %s, not GL_UNSIGNED_BYTE (%d), is it going to work?!?!', texture['type'], int(gl.GL_UNSIGNED_BYTE))
+            _logger.warn('''you are trying to use a texture with property "type" set to %s,
+            not GL_UNSIGNED_BYTE (%d), is it going to work?!?!''',
+                         texture['type'], int(gl.GL_UNSIGNED_BYTE))
         gl.glTexImage2D(texture['target'], 0,
                         texture['internalFormat'],
                         pil_image.width, pil_image.height, 0,
                         gl.GL_RGB, #texture['format'], # TODO: INVESTIGATE
                         texture['type'],
-                        np.array(list(pil_image.getdata()), dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
+                        np.array(list(pil_image.getdata()),
+                                 dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
         gl.glGenerateMipmap(texture['target'])
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create texture "%s"' % texture_name)
@@ -179,13 +191,16 @@ def setup_textures_v2(gltf, uri_path):
         if 'type' not in texture:
             texture['type'] = gl.GL_UNSIGNED_BYTE
         if texture['type'] != gl.GL_UNSIGNED_BYTE:
-            _logger.warn('you are trying to use a texture with property "type" set to %s, not GL_UNSIGNED_BYTE (%d), is it going to work?!?!', texture['type'], int(gl.GL_UNSIGNED_BYTE))
+            _logger.warn('''you are trying to use a texture with property "type" set to %s,
+            not GL_UNSIGNED_BYTE (%d), is it going to work?!?!''',
+                         texture['type'], int(gl.GL_UNSIGNED_BYTE))
         gl.glTexImage2D(texture['target'], 0,
                         gl.GL_RGB if pil_image.mode == 'RGB' else gl.GL_RGBA,
                         pil_image.width, pil_image.height, 0,
                         gl.GL_RGB if pil_image.mode == 'RGB' else gl.GL_RGBA,
                         texture['type'],
-                        np.array(list(pil_image.getdata()), dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
+                        np.array(list(pil_image.getdata()),
+                                 dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
         gl.glGenerateMipmap(texture['target'])
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create texture %d' % i)
@@ -286,7 +301,8 @@ def set_material_state(material_name, gltf):
         parameter = technique['parameters'][parameter_name]
         if 'semantic' in parameter:
             continue
-        value = material_values.get(parameter_name, parameter.get('value', DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.get(parameter['type'])))
+        value = material_values.get(parameter_name,
+                                    parameter.get('value', DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.get(parameter['type'])))
         if value is None:
             raise Exception('could not determine a value to use for material "%s" parameter "%s" (type %s) uniform "%s"' % (
                 material_name, parameter_name, parameter['type'], uniform_name))
@@ -299,9 +315,9 @@ def set_material_state(material_name, gltf):
             program['uniform_locations'][uniform_name] = location
         if parameter['type'] == gl.GL_SAMPLER_2D:
             texture = textures[value]
-            gl.glActiveTexture(gl.GL_TEXTURE0+set_material_state.n_tex)
+            gl.glActiveTexture(gl.GL_TEXTURE0 + set_material_state.n_tex)
             gl.glBindTexture(texture['target'], texture['id'])
-            gl.glBindSampler(gl.GL_TEXTURE0+set_material_state.n_tex,
+            gl.glBindSampler(gl.GL_TEXTURE0 + set_material_state.n_tex,
                              samplers[texture['sampler']]['id'])
             gl.glUniform1i(location, set_material_state.n_tex)
             set_material_state.n_tex += 1
@@ -382,7 +398,8 @@ def set_draw_state(primitive, gltf,
                 if normal_matrix is not None:
                     gl.glUniformMatrix3fv(location, 1, True, normal_matrix)
             else:
-                raise Exception('unhandled semantic for uniform "%s": %s' % (uniform_name, parameter['semantic']))
+                raise Exception('unhandled semantic for uniform "%s": %s' %
+                                (uniform_name, parameter['semantic']))
     if 'vao' not in primitive:
         enabled_locations = []
         buffer_id = None
@@ -407,7 +424,8 @@ def set_draw_state(primitive, gltf,
                                                           bufferView.get('byteStride')), # GLTF 2.0
                                              c_void_p(accessor.get('byteOffset', 0)))
                 else:
-                    raise Exception('expected a semantic property for attribute "%s", parameter "%s"' % (attribute_name, parameter_name))
+                    raise Exception('expected a semantic property for attribute "%s", parameter "%s"' %
+                                    (attribute_name, parameter_name))
         primitive['vao'] = vao
         gl.glBindVertexArray(0)
         for location in enabled_locations:
