@@ -97,6 +97,8 @@ def load_images(gltf, uri_path):
     for image_name, image in gltf.get('images', {}).items():
         filename = os.path.join(uri_path, image['uri'])
         pil_image = Image.open(filename)
+        if pil_image.mode == 'P':
+            pil_image = pil_image.convert(pil_image.palette.mode)
         pil_images[filename] = pil_image
         _logger.debug('loaded image "%s" from "%s"', image_name, filename)
     return pil_images
@@ -107,6 +109,8 @@ def load_images_v2(gltf, uri_path):
     for i, image in enumerate(gltf.get('images', [])):
         filename = os.path.join(uri_path, image['uri'])
         pil_image = Image.open(filename)
+        if pil_image.mode == 'P':
+            pil_image = pil_image.convert(pil_image.palette.mode)
         pil_images[filename] = pil_image
         _logger.debug('loaded image %s from "%s"',
                       i if 'name' not in image else '%d ("%s")' % (i, image['name']),
@@ -133,7 +137,7 @@ def setup_textures(gltf, uri_path):
         gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_S, sampler.get('wrapS', 10497))
         gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_T, sampler.get('wrapT', 10497))
         sampler['id'] = sampler_id
-        #gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
         if 'type' not in texture:
             texture['type'] = gl.GL_UNSIGNED_BYTE
         if texture['type'] != gl.GL_UNSIGNED_BYTE:
@@ -177,9 +181,9 @@ def setup_textures_v2(gltf, uri_path):
         if texture['type'] != gl.GL_UNSIGNED_BYTE:
             _logger.warn('you are trying to use a texture with property "type" set to %s, not GL_UNSIGNED_BYTE (%d), is it going to work?!?!', texture['type'], int(gl.GL_UNSIGNED_BYTE))
         gl.glTexImage2D(texture['target'], 0,
-                        gl.GL_RGBA,
+                        gl.GL_RGB if pil_image.mode == 'RGB' else gl.GL_RGBA,
                         pil_image.width, pil_image.height, 0,
-                        gl.GL_RGB, #texture['format'], # TODO: INVESTIGATE
+                        gl.GL_RGB if pil_image.mode == 'RGB' else gl.GL_RGBA,
                         texture['type'],
                         np.array(list(pil_image.getdata()), dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
         gl.glGenerateMipmap(texture['target'])
