@@ -1,4 +1,3 @@
-#!python
 from sys import exit
 import os.path
 import json

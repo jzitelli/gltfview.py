@@ -53,11 +53,11 @@ def setup_shaders(gltf, uri_path):
         uri = shader['uri']
         if uri.startswith('data:text/plain;base64,'):
             shader_str = base64.urlsafe_b64decode(uri.split(',')[1]).decode()
-            _logger.debug('decoded shader "%s":\n%s', shader_name, shader_str)
+            _logger.debug('decoded shader "%s"', shader_name)
         else:
             filename = os.path.join(uri_path, shader['uri'])
             shader_str = open(filename).read()
-            _logger.debug('loaded shader "%s" (from %s):\n%s', shader_name, filename, shader_str)
+            _logger.debug('loaded shader "%s" (from %s)', shader_name, filename)
         shader_id = gl.glCreateShader(shader['type'])
         gl.glShaderSource(shader_id, shader_str)
         gl.glCompileShader(shader_id)
@@ -83,8 +83,13 @@ def setup_programs(gltf, shader_ids):
         program['id'] = program_id
         program['attribute_locations'] = {attribute_name: gl.glGetAttribLocation(program_id, attribute_name)
                                           for attribute_name in program['attributes']}
-        program['uniform_locations'] = {}
-        _logger.debug('linked program "%s"\n  attribute locations: %s', program_name, program['attribute_locations'])
+        if 'uniforms' in program:
+            program['uniform_locations'] = {uniform_name: gl.glGetUniformLocation(program_id, uniform_name)
+                                            for uniform_name in program['uniforms']}
+        else:
+            program['uniform_locations'] = {}
+        _logger.debug('linked program "%s"\n  attribute locations: %s\n  uniform locations: %s',
+                      program_name, program['attribute_locations'], program['uniform_locations'])
 
 
 def setup_programs_v2(gltf):
@@ -115,23 +120,22 @@ def setup_textures(gltf, uri_path):
     Creates within the current GL context all textures referenced in the input gltf dict.
     """
     pil_images = load_images(gltf, uri_path)
-    texture_id_0 = gl.glGenTextures(len(gltf.get('textures', {})))
     for i, (texture_name, texture) in enumerate(gltf.get('textures', {}).items()):
         sampler = gltf['samplers'][texture['sampler']]
         image = gltf['images'][texture['source']]
         filename = os.path.join(uri_path, image['uri'])
         pil_image = pil_images[filename]
-        #texture_id = gl.glGenTextures(1)
-        texture_id = texture_id_0 + i
         if 'target' not in texture:
             texture['target'] = gl.GL_TEXTURE_2D # GLTF 1.0 DEFAULT
+        texture_id = gl.glGenTextures(1)
         gl.glBindTexture(texture['target'], texture_id)
-        sampler_id = gl.glGenSamplers(1)
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MIN_FILTER, sampler.get('minFilter', 9986))
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MAG_FILTER, sampler.get('magFilter', 9729))
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_S, sampler.get('wrapS', 10497))
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_T, sampler.get('wrapT', 10497))
-        sampler['id'] = sampler_id
+        if 'id' not in sampler:
+            sampler_id = gl.glGenSamplers(1)
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MIN_FILTER, sampler.get('minFilter', 9986))
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MAG_FILTER, sampler.get('magFilter', 9729))
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_S, sampler.get('wrapS', 10497))
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_T, sampler.get('wrapT', 10497))
+            sampler['id'] = sampler_id
         gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
         if 'type' not in texture:
             texture['type'] = gl.GL_UNSIGNED_BYTE
@@ -142,7 +146,7 @@ def setup_textures(gltf, uri_path):
         gl.glTexImage2D(texture['target'], 0,
                         texture['internalFormat'],
                         pil_image.width, pil_image.height, 0,
-                        gl.GL_RGB, #texture['format'], # TODO: INVESTIGATE
+                        gl.GL_RGB, #texture['format'],
                         texture['type'],
                         np.array(list(pil_image.getdata()),
                                  dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
