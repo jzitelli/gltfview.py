@@ -36,6 +36,9 @@ def parse_args():
     parser.add_argument('--camera-position',
                         help='position of the camera in world space',
                         default=None)
+    parser.add_argument('--camera-rotation',
+                        help='rotation of the camera (specified in Euler angles) in world space',
+                        default=None)
     return parser.parse_args()
 
 
@@ -69,6 +72,13 @@ def main():
             _logger.error('%s is an invalid value for camera-position', args.camera_position)
             exit(1)
 
+    if args.camera_rotation is not None:
+        try:
+            args.camera_rotation = tuple(float(x.strip()) for x in args.camera_rotation.split(','))
+        except Exception as err:
+            _logger.error('%s is an invalid value for camera-rotation', args.camera_rotation)
+            exit(1)
+
     try:
         gltf = json.loads(open(args.filename).read())
         _logger.info('loaded "%s"', args.filename)
@@ -82,7 +92,9 @@ def main():
               multisample=int(args.msaa),
               nframes=args.nframes,
               screenshot=args.screenshot,
-              camera_position=args.camera_position)
+              camera_position=args.camera_position,
+              camera_rotation=args.camera_rotation,
+              filename=args.filename)
 
 
 if __name__ == "__main__":

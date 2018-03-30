@@ -5,7 +5,6 @@ try:
     from types import MappingProxyType
 except ImportError:
     MappingProxyType = dict
-import re
 import logging
 
 import numpy as np
@@ -16,7 +15,7 @@ import PIL.Image as Image
 _here = os.path.dirname(__file__)
 _logger = logging.getLogger(__name__)
 from gltfutils.gl_rendering import set_matrix_from_quaternion
-import gltfutils.pbrmr as pbrmr
+from gltfutils.pbrmr import setup_pbrmr_programs
 
 
 CHECK_GL_ERRORS = False
@@ -29,12 +28,7 @@ GLTF_BUFFERVIEW_TYPE_SIZES = MappingProxyType({
     'MAT3': 9,
     'MAT4': 16
 })
-_DEFAULT_SAMPLER = {
-    "magFilter": 9729,
-    "minFilter": 9987,
-    "wrapS": 10497,
-    "wrapT": 10497
-}
+
 _DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE = {
     gl.GL_INT: 0,
     gl.GL_INT_VEC2: (0, 0),
@@ -49,8 +43,12 @@ _DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE = {
 for k, v in list(_DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.items()):
     _DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE[int(k)] = v
 
-_ATTRIBUTE_DECL_RE = re.compile(r"attribute\s+(?P<type_spec>\w+)\s+(?P<attribute_name>\w+)\s*;")
-_UNIFORM_DECL_RE =   re.compile(r"uniform\s+(?P<type_spec>\w+)\s+(?P<uniform_name>\w+)\s*(=\s*(?P<initialization>.*)\s*;|;)")
+_DEFAULT_SAMPLER = {
+    "magFilter": 9729,
+    "minFilter": 9987,
+    "wrapS": 10497,
+    "wrapT": 10497
+}
 
 
 def setup_shaders(gltf, uri_path):
@@ -107,7 +105,7 @@ def backport_pbrmr_materials(gltf):
     into an equivalent set of v1 material and lower-level properties:
     shaders, programs, techniques, materials.
     """
-    pbrmr.setup_pbrmr_programs(gltf)
+    setup_pbrmr_programs(gltf)
 
 
 def load_images(gltf, uri_path):
@@ -210,7 +208,6 @@ def setup_textures_v2(gltf, uri_path):
             internal_format = gl.GL_RGBA
         #elif pil_image.mode == 'R':
         #    internal_format = gl.GL_R
-        _logger.debug('pil_image.mode = %s', pil_image.mode)
         gl.glTexImage2D(target, 0,
                         internal_format,
                         pil_image.width, pil_image.height, 0,
@@ -436,15 +433,18 @@ def set_draw_state(primitive, gltf,
                     accessor = accessors[accessor_names[semantic]]
                     bufferView = bufferViews[accessor['bufferView']]
                     location = program['attribute_locations'][attribute_name]
-                    gl.glEnableVertexAttribArray(location)
-                    enabled_locations.append(location)
                     if buffer_id != bufferView['id']:
                         buffer_id = bufferView['id']
-                        gl.glBindBuffer(bufferView.get('target', gl.GL_ARRAY_BUFFER), buffer_id)
+                        if 'target' not in bufferView:
+                            bufferView['target'] = gl.GL_ARRAY_BUFFER
+                        gl.glBindBuffer(bufferView['target'], buffer_id)
+                    gl.glEnableVertexAttribArray(location)
+                    enabled_locations.append(location)
+                    componentType = accessor['componentType']
                     gl.glVertexAttribPointer(location, GLTF_BUFFERVIEW_TYPE_SIZES[accessor['type']],
-                                             accessor['componentType'], False,
+                                             componentType, False,
                                              accessor.get('byteStride', # GLTF 1.0
-                                                          bufferView.get('byteStride')), # GLTF 2.0
+                                                          bufferView.get('byteStride', 0)), # GLTF 2.0
                                              c_void_p(accessor.get('byteOffset', 0)))
                 else:
                     raise Exception('expected a semantic property for attribute "%s", parameter "%s"' %
@@ -459,7 +459,6 @@ def set_draw_state(primitive, gltf,
             raise Exception('error setting draw state')
 set_draw_state.modelview_matrix = np.empty((4,4), dtype=np.float32)
 set_draw_state.mvp_matrix = np.empty((4,4), dtype=np.float32)
-set_draw_state.vaos = {}
 
 
 def draw_primitive(primitive, gltf,
@@ -482,9 +481,11 @@ def draw_primitive(primitive, gltf,
                    local_matrix=local_matrix)
     index_accessor = gltf['accessors'][primitive['indices']]
     index_bufferView = gltf['bufferViews'][index_accessor['bufferView']]
+    if 'target' not in index_bufferView:
+        index_bufferView['target'] = gl.GL_ELEMENT_ARRAY_BUFFER
     gl.glBindBuffer(index_bufferView['target'], index_bufferView['id'])
-    gl.glDrawElements(primitive['mode'], index_accessor['count'], index_accessor['componentType'],
-                      c_void_p(index_accessor.get('byteOffset', 0)))
+    gl.glDrawElements(primitive.get('mode', gl.GL_TRIANGLES), index_accessor['count'],
+                      index_accessor['componentType'], c_void_p(index_accessor.get('byteOffset', 0)))
     global num_draw_calls
     num_draw_calls += 1
     if CHECK_GL_ERRORS:
