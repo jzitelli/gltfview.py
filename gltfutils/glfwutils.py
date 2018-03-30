@@ -39,7 +39,7 @@ def setup_glfw(width=800, height=600, double_buffered=False, multisample=None):
 
 def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=None,
               clear_color=(0.01, 0.01, 0.013, 0.0),
-              openvr=False, nframes=None):
+              openvr=False, nframes=None, screenshot=None):
     _t0 = time.time()
     version = '1.0'
     generator = 'no generator was specified for this file'
@@ -137,8 +137,11 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
     render(gltf, nodes, window_size,
            camera_world_matrix=camera_world_matrix,
            projection_matrix=projection_matrix)
+    if screenshot:
+        save_screen(window, screenshot)
     num_draw_calls_per_frame = gltfu.num_draw_calls
     _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame)
+
 
     _logger.info('''STARTING RENDER LOOP%s...''',
                  ' (RENDERING %s FRAMES)' % nframes if nframes is not None else '')
@@ -148,6 +151,7 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
 
     if openvr and OpenVRRenderer is not None:
         vr_renderer = OpenVRRenderer(multisample=multisample, poll_tracked_device_frequency=90)
+        setup_vr_controls()
         render_stats = vr_render_loop(vr_renderer=vr_renderer, process_input=process_input,
                                       window=window, window_size=window_size,
                                       gltf=gltf, nodes=nodes)
@@ -238,8 +242,6 @@ def setup_controls(window=None, camera_world_matrix=None,
                      <-/-> (arrow keys)- turn Lft/Rgt
                      Esc --------------- exit
 
-  HTC VIVE CONTROLS: TBD
-
 ''')
     camera_position = camera_world_matrix[3, :3]
     camera_rotation = camera_world_matrix[:3, :3]
@@ -286,3 +288,21 @@ def setup_controls(window=None, camera_world_matrix=None,
         if dposition.any():
             camera_position[:] += camera_rotation.T.dot(dposition)
     return process_input
+
+
+def setup_vr_controls():
+    _logger.info('''
+
+      HTC VIVE CONTROLS: TBD
+
+''')
+
+
+def save_screen(window, filepath='screenshot.png'):
+    _logger.info('saving screenshot to %s...', filepath)
+    from PIL import Image
+    w, h = glfw.GetWindowSize(window)
+    pixels = gl.glReadPixels(0, 0, w, h, gl.GL_RGB, gl.GL_UNSIGNED_BYTE)
+    pil_image = Image.frombytes('RGB', (w, h), pixels).transpose(Image.FLIP_TOP_BOTTOM)
+    pil_image.save(filepath)
+    _logger.info('...saved %s', filepath)

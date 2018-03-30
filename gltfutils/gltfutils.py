@@ -29,7 +29,13 @@ GLTF_BUFFERVIEW_TYPE_SIZES = MappingProxyType({
     'MAT3': 9,
     'MAT4': 16
 })
-DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE = {
+_DEFAULT_SAMPLER = {
+    "magFilter": 9729,
+    "minFilter": 9987,
+    "wrapS": 10497,
+    "wrapT": 10497
+}
+_DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE = {
     gl.GL_INT: 0,
     gl.GL_INT_VEC2: (0, 0),
     gl.GL_FLOAT: 1.0,
@@ -40,8 +46,9 @@ DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE = {
     gl.GL_FLOAT_MAT3: np.eye(3, dtype=np.float32),
     gl.GL_FLOAT_MAT4: np.eye(4, dtype=np.float32)
 }
-for k, v in list(DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.items()):
-    DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE[int(k)] = v
+for k, v in list(_DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.items()):
+    _DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE[int(k)] = v
+
 _ATTRIBUTE_DECL_RE = re.compile(r"attribute\s+(?P<type_spec>\w+)\s+(?P<attribute_name>\w+)\s*;")
 _UNIFORM_DECL_RE =   re.compile(r"uniform\s+(?P<type_spec>\w+)\s+(?P<uniform_name>\w+)\s*(=\s*(?P<initialization>.*)\s*;|;)")
 
@@ -163,35 +170,48 @@ def setup_textures_v2(gltf, uri_path):
     if textures:
         texture_id_0 = gl.glGenTextures(len(textures))
     for i, texture in enumerate(textures):
+        if 'samplers' not in gltf:
+            gltf['samplers'] = []
+
+        if 'sampler' not in texture or texture['sampler'] not in gltf['samplers']:
+            texture['sampler'] = len(gltf['samplers'])
+            gltf['samplers'].append(_DEFAULT_SAMPLER)
         sampler = gltf['samplers'][texture['sampler']]
         image = gltf['images'][texture['source']]
         filename = os.path.join(uri_path, image['uri'])
         pil_image = pil_images[filename]
-        texture_id = texture_id_0 + i
+        texture_id = gl.glGenTextures(1)
         if 'target' not in texture:
-            texture['target'] = gl.GL_TEXTURE_2D # GLTF 1.0 DEFAULT
-        gl.glBindTexture(texture['target'], texture_id)
-        sampler_id = gl.glGenSamplers(1)
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MIN_FILTER, sampler.get('minFilter', 9986))
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MAG_FILTER, sampler.get('magFilter', 9729))
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_S, sampler.get('wrapS', 10497))
-        gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_T, sampler.get('wrapT', 10497))
-        sampler['id'] = sampler_id
-        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+            texture['target'] = gl.GL_TEXTURE_2D # GLTF-1.0 DEFAULT
+        target = texture['target']
+        gl.glBindTexture(target, texture_id)
         if 'type' not in texture:
             texture['type'] = gl.GL_UNSIGNED_BYTE
         if texture['type'] != gl.GL_UNSIGNED_BYTE:
             _logger.warn('''you are trying to use a texture with property "type" set to %s,
             not GL_UNSIGNED_BYTE (%d), is it going to work?!?!''',
                          texture['type'], int(gl.GL_UNSIGNED_BYTE))
-        gl.glTexImage2D(texture['target'], 0,
-                        gl.GL_RGB if pil_image.mode == 'RGB' else gl.GL_RGBA,
+        if 'id' not in sampler:
+            sampler_id = gl.glGenSamplers(1)
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MIN_FILTER, sampler.get('minFilter', 9986))
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_MAG_FILTER, sampler.get('magFilter', 9729))
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_S, sampler.get('wrapS', 10497))
+            gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_T, sampler.get('wrapT', 10497))
+            sampler['id'] = sampler_id
+        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+        internal_format = gl.GL_RGB
+        if pil_image.mode == 'RGBA':
+            internal_format = gl.GL_RGBA
+        #elif pil_image.mode == 'R':
+        #    internal_format = gl.GL_R
+        gl.glTexImage2D(target, 0,
+                        internal_format,
                         pil_image.width, pil_image.height, 0,
                         gl.GL_RGB if pil_image.mode == 'RGB' else gl.GL_RGBA,
                         texture['type'],
                         np.array(list(pil_image.getdata()),
                                  dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
-        gl.glGenerateMipmap(texture['target'])
+        gl.glGenerateMipmap(target)
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create texture %d' % i)
         texture['id'] = texture_id
@@ -241,14 +261,15 @@ def setup_buffers_v2(gltf, uri_path):
                           filename)
     for i, bufferView in enumerate(gltf.get('bufferViews', [])):
         buffer_id = gl.glGenBuffers(1)
-        byteOffset = bufferView['byteOffset']
-        gl.glBindBuffer(bufferView['target'], buffer_id)
-        gl.glBufferData(bufferView['target'], bufferView['byteLength'],
+        byteOffset = bufferView.get('byteOffset', 0)
+        target = bufferView.get('target', gl.GL_ARRAY_BUFFER)
+        gl.glBindBuffer(target, buffer_id)
+        gl.glBufferData(target, bufferView['byteLength'],
                         data_buffers[bufferView['buffer']][byteOffset:], gl.GL_STATIC_DRAW)
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create bufferView %s' % i)
         bufferView['id'] = buffer_id
-        gl.glBindBuffer(bufferView['target'], 0)
+        gl.glBindBuffer(target, 0)
         _logger.debug('created bufferView %s', i if 'name' not in bufferView else '%d ("%s")' % (i, bufferView['name']))
 
 
@@ -292,7 +313,7 @@ def set_material_state(material_name, gltf):
         if 'semantic' in parameter:
             continue
         value = material_values.get(parameter_name,
-                                    parameter.get('value', DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.get(parameter['type'])))
+                                    parameter.get('value', _DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.get(parameter['type'])))
         if value is None:
             raise Exception('could not determine a value to use for material "%s" parameter "%s" (type %s) uniform "%s"' % (
                 material_name, parameter_name, parameter['type'], uniform_name))
@@ -407,7 +428,7 @@ def set_draw_state(primitive, gltf,
                     enabled_locations.append(location)
                     if buffer_id != bufferView['id']:
                         buffer_id = bufferView['id']
-                        gl.glBindBuffer(bufferView['target'], buffer_id)
+                        gl.glBindBuffer(bufferView.get('target', gl.GL_ARRAY_BUFFER), buffer_id)
                     gl.glVertexAttribPointer(location, GLTF_BUFFERVIEW_TYPE_SIZES[accessor['type']],
                                              accessor['componentType'], False,
                                              accessor.get('byteStride', # GLTF 1.0
@@ -535,9 +556,12 @@ def update_world_matrices(node, gltf, world_matrix=None):
         matrix = np.eye(4, dtype=np.float32)
         if 'rotation' in node:
             matrix[:3,:3] = set_matrix_from_quaternion(node['rotation']).T
-            matrix[:3, 0] *= node['scale'][0]
-            matrix[:3, 1] *= node['scale'][1]
-            matrix[:3, 2] *= node['scale'][2]
+        if 'scale' in node:
+            scale = node['scale']
+            matrix[:3, 0] *= scale[0]
+            matrix[:3, 1] *= scale[1]
+            matrix[:3, 2] *= scale[2]
+        if 'translation' in node:
             matrix[:3, 3] = node['translation']
     else:
         matrix = np.array(node['matrix'], dtype=np.float32).reshape((4, 4)).T

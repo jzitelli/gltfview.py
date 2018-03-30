@@ -8,7 +8,7 @@ _LOGGING_FORMAT = '%(name)s.%(funcName)s[%(levelname)s]: %(message)s'
 _DEBUG_LOGGING_FORMAT = '%(asctime).19s [%(levelname)s]%(name)s.%(funcName)s:%(lineno)d: %(message)s'
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('filename',
                         help='path of glTF file to view')
@@ -30,8 +30,14 @@ def main():
     parser.add_argument("--nframes",
                         help="exit after rendering specified number of frames",
                         default=None)
-    args = parser.parse_args()
+    parser.add_argument('-s', '--screenshot',
+                        help='save a screenshot',
+                        default=None)
+    return parser.parse_args()
 
+
+def main():
+    args = parse_args()
     if args.verbose:
         logging.basicConfig(format=_DEBUG_LOGGING_FORMAT, level=logging.DEBUG)
         opengl_logger = logging.getLogger('OpenGL')
@@ -65,7 +71,8 @@ def main():
 
     view_gltf(gltf, uri_prefix, openvr=args.openvr,
               multisample=int(args.msaa),
-              nframes=nframes)
+              nframes=nframes,
+              screenshot=args.screenshot)
 
 
 if __name__ == "__main__":
