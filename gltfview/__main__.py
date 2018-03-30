@@ -63,6 +63,7 @@ def main():
             _logger.error('%s is an invalid value for nframes', nframes)
             exit(1)
 
+    print(args)
     try:
         gltf = json.loads(open(args.filename).read())
         _logger.info('loaded "%s"', args.filename)

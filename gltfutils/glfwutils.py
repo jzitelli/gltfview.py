@@ -111,8 +111,9 @@ def view_gltf(gltf, uri_path, scene_name=None,
         scene = init_scene_v1(gltf, uri_path)
     else:
         if not version.startswith('2.'):
-            _logger.warning('''unknown GLTF version: %s ...
-            ...will try loading as 2.0...''')
+            _logger.warning('''unknown GLTF version: %s
+            ...will try loading as 2.0...
+            ''')
         scene = init_scene_v2(gltf, uri_path)
     if scene is None:
         _logger.error('could not load scene, now exiting...')
@@ -165,8 +166,9 @@ def view_gltf(gltf, uri_path, scene_name=None,
     _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame)
 
 
-    _logger.info('''STARTING RENDER LOOP%s...''',
-                 ' (RENDERING %s FRAMES)' % nframes if nframes is not None else '')
+    _logger.info('''STARTING RENDER LOOP%s...''')
+    if nframes:
+        _logger.info("""''' * * * WILL RENDER %s FRAMES * * * '''""")
     stdout.flush()
 
     import gc; gc.collect() # does it do anything?
@@ -263,7 +265,7 @@ def setup_controls(window=None, camera_world_matrix=None,
                      Q/Z --------------- move Up/Down
                      <-/-> (arrow keys)- turn Lft/Rgt
 
-                     s ----------------- save screenshot
+                     C ----------------- capture screenshot
 
                      Esc --------------- quit
 
@@ -284,8 +286,17 @@ def setup_controls(window=None, camera_world_matrix=None,
     def on_mousedown(window, button, action, mods):
         pass
     glfw.SetMouseButtonCallback(window, on_mousedown)
+    _last_c = 0.0
+    _num_captures = 0
     def process_input(dt):
+        nonlocal _last_c, _num_captures
         glfw.PollEvents()
+        if _last_c > 0:
+            _last_c = min(_last_c - dt, 0.0)
+        elif key_state[glfw.KEY_C]:
+            save_screen(window, 'screen-capture.%03d.png' % _num_captures)
+            _num_captures += 1
+            _last_c = 0.5
         dposition[:] = 0.0
         if key_state[glfw.KEY_W]:
             dposition[2] -= dt * move_speed
