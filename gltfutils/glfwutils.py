@@ -1,4 +1,4 @@
-from sys import stdout
+from sys import stdout, exit
 from collections import defaultdict
 import time
 import logging
@@ -37,9 +37,15 @@ def setup_glfw(width=800, height=600, double_buffered=False, multisample=None):
     return window
 
 
-def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=None,
+def view_gltf(gltf, uri_path, scene_name=None,
+              openvr=False,
+              window_size=None,
               clear_color=(0.01, 0.01, 0.013, 0.0),
-              openvr=False, nframes=None, screenshot=None):
+              multisample=None,
+              nframes=None,
+              screenshot=None,
+              camera_position=np.zeros(3, dtype=np.float32),
+              **kwargs):
     _t0 = time.time()
     version = '1.0'
     generator = 'no generator was specified for this file'
@@ -73,10 +79,11 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
             gltfu.calc_projection_matrix(camera, out=projection_matrix,
                                          aspectRatio=window_size[0] / max(5, window_size[1]))
     glfw.SetWindowSizeCallback(window, on_resize)
-
     gl.glClearColor(*clear_color)
+    on_resize(window, window_size[0], window_size[1])
 
-    if version.startswith('1.'):
+
+    def init_scene_v1(gltf, uri_path):
         shader_ids = gltfu.setup_shaders(gltf, uri_path)
         gltfu.setup_programs(gltf, shader_ids)
         gltfu.setup_textures(gltf, uri_path)
@@ -85,9 +92,10 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
             scene = gltf['scenes'][scene_name]
         else:
             scene = list(gltf['scenes'].values())[0]
+        return scene
 
-    elif version.startswith('2.'):
-        gltfu.setup_programs_v2(gltf)
+    def init_scene_v2(gltf, uri_path):
+        gltfu.backport_pbrmr_materials(gltf)
         shader_ids = gltfu.setup_shaders(gltf, uri_path)
         gltfu.setup_programs(gltf, shader_ids)
         gltfu.setup_textures_v2(gltf, uri_path)
@@ -96,6 +104,20 @@ def view_gltf(gltf, uri_path, scene_name=None, window_size=None, multisample=Non
             scene = gltf['scenes'][scene_name]
         else:
             scene = gltf['scenes'][0]
+        return scene
+
+
+    if version.startswith('1.'):
+        scene = init_scene_v1(gltf, uri_path)
+    else:
+        if not version.startswith('2.'):
+            _logger.warning('''unknown GLTF version: %s ...
+            ...will try loading as 2.0...''')
+        scene = init_scene_v2(gltf, uri_path)
+    if scene is None:
+        _logger.error('could not load scene, now exiting...')
+        exit(1)
+
 
     nodes = [gltf['nodes'][n] for n in scene['nodes']]
     for node in nodes:
@@ -240,7 +262,10 @@ def setup_controls(window=None, camera_world_matrix=None,
   KEYBOARD CONTROLS: W/S/A/D ----------- move Fwd/Bwd/Lft/Rgt
                      Q/Z --------------- move Up/Down
                      <-/-> (arrow keys)- turn Lft/Rgt
-                     Esc --------------- exit
+
+                     s ----------------- save screenshot
+
+                     Esc --------------- quit
 
 ''')
     camera_position = camera_world_matrix[3, :3]

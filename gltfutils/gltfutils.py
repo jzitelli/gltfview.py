@@ -76,8 +76,10 @@ def setup_shaders(gltf, uri_path):
 
 
 def setup_programs(gltf, shader_ids):
-    """Creates and links OpenGL programs for the input gltf dict, given the mapping
-    from GLTF shader to OpenGL handle of the compiled vertex / fragment shaders."""
+    """
+    Creates and links OpenGL programs for the input gltf dict, given the mapping
+    from GLTF shader to OpenGL handle of the compiled vertex / fragment shaders.
+    """
     for program_name, program in gltf['programs'].items():
         program_id = gl.glCreateProgram()
         gl.glAttachShader(program_id, shader_ids[program['vertexShader']])
@@ -99,14 +101,20 @@ def setup_programs(gltf, shader_ids):
                       program_name, program['attribute_locations'], program['uniform_locations'])
 
 
-def setup_programs_v2(gltf):
-    """Like ``setup_programs``, but for GLTF version 2.0."""
+def backport_pbrmr_materials(gltf):
+    """
+    Converts v2 materials (paramaterized by the GLTF-2.0 standard PBR-MR material model)
+    into an equivalent set of v1 material and lower-level properties:
+    shaders, programs, techniques, materials.
+    """
     pbrmr.setup_pbrmr_programs(gltf)
 
 
 def load_images(gltf, uri_path):
-    """Loads all images referenced in the input gltf dict,
-    returning a dict mapping GLTF image to loaded PIL.Image."""
+    """
+    Loads all images referenced in the input gltf dict,
+    returning a dict mapping GLTF image to loaded PIL.Image.
+    """
     # TODO: support data URIs
     pil_images = {}
     images = gltf.get('images', {})
@@ -165,17 +173,15 @@ def setup_textures(gltf, uri_path):
 
 
 def setup_textures_v2(gltf, uri_path):
+    from copy import copy
     pil_images = load_images(gltf, uri_path)
     textures = gltf.get('textures', [])
-    if textures:
-        texture_id_0 = gl.glGenTextures(len(textures))
     for i, texture in enumerate(textures):
         if 'samplers' not in gltf:
             gltf['samplers'] = []
-
         if 'sampler' not in texture or texture['sampler'] not in gltf['samplers']:
             texture['sampler'] = len(gltf['samplers'])
-            gltf['samplers'].append(_DEFAULT_SAMPLER)
+            gltf['samplers'].append(copy(_DEFAULT_SAMPLER))
         sampler = gltf['samplers'][texture['sampler']]
         image = gltf['images'][texture['source']]
         filename = os.path.join(uri_path, image['uri'])
@@ -204,6 +210,7 @@ def setup_textures_v2(gltf, uri_path):
             internal_format = gl.GL_RGBA
         #elif pil_image.mode == 'R':
         #    internal_format = gl.GL_R
+        _logger.debug('pil_image.mode = %s', pil_image.mode)
         gl.glTexImage2D(target, 0,
                         internal_format,
                         pil_image.width, pil_image.height, 0,
@@ -215,7 +222,10 @@ def setup_textures_v2(gltf, uri_path):
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create texture %d' % i)
         texture['id'] = texture_id
-        _logger.debug('created texture %s', i if 'name' not in texture else ('%d ("%s")' % (i, texture['name'])))
+        _logger.debug('created texture %s',
+                      i
+                      if 'name' not in texture else
+                      ('%d ("%s")' % (i, texture['name'])))
 
 
 def setup_buffers(gltf, uri_path):
@@ -313,10 +323,12 @@ def set_material_state(material_name, gltf):
         if 'semantic' in parameter:
             continue
         value = material_values.get(parameter_name,
-                                    parameter.get('value', _DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.get(parameter['type'])))
+                                    parameter.get('value',
+                                                  _DEFAULT_MATERIAL_VALUES_BY_PARAM_TYPE.get(parameter['type'])))
         if value is None:
-            raise Exception('could not determine a value to use for material "%s" parameter "%s" (type %s) uniform "%s"' % (
-                material_name, parameter_name, parameter['type'], uniform_name))
+            raise Exception('''could not determine a value to use for material "%s", parameter "%s":
+            %s %s''' % (material_name, parameter_name,
+                        parameter['type'], uniform_name))
         if isinstance(value, (tuple, list)):
             value = np.array(value, dtype=np.float32)
         if uniform_name in program['uniform_locations']:

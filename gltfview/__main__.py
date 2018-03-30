@@ -33,6 +33,9 @@ def parse_args():
     parser.add_argument('-s', '--screenshot',
                         help='save a screenshot',
                         default=None)
+    parser.add_argument('--camera-position',
+                        help='position of the camera in world space',
+                        default=None)
     return parser.parse_args()
 
 
@@ -43,7 +46,7 @@ def main():
         opengl_logger = logging.getLogger('OpenGL')
         opengl_logger.setLevel(logging.INFO)
         pil_logger = logging.getLogger('PIL')
-        pil_logger.setLevel(logging.ERROR)
+        pil_logger.setLevel(logging.WARNING)
     else:
         logging.basicConfig(format=_LOGGING_FORMAT, level=logging.INFO)
 
