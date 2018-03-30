@@ -79,6 +79,9 @@ def main():
             _logger.error('%s is an invalid value for camera-rotation', args.camera_rotation)
             exit(1)
 
+    if args.openvr:
+        _logger.info('will try viewing using OpenVR...')
+
     try:
         gltf = json.loads(open(args.filename).read())
         _logger.info('loaded "%s"', args.filename)
@@ -88,7 +91,8 @@ def main():
 
     from gltfutils.glfwutils import view_gltf
 
-    view_gltf(gltf, uri_prefix, openvr=args.openvr,
+    view_gltf(gltf, uri_prefix,
+              openvr=args.openvr,
               multisample=int(args.msaa),
               nframes=args.nframes,
               screenshot=args.screenshot,

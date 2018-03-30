@@ -17,7 +17,8 @@ _logger = logging.getLogger(__name__)
 import gltfutils.gltfutils as gltfu
 try:
     from gltfutils.openvr_renderer import OpenVRRenderer
-except ImportError:
+except ImportError as err:
+    _logger.warning('could not import OpenVRRenderer:\n%s', err)
     OpenVRRenderer = None
 
 
@@ -156,8 +157,6 @@ def view_gltf(gltf, uri_path, scene_name=None,
             r = np.array([[c, -s],
                           [s,  c]], dtype=np.float32)
             camera_world_matrix[:3:2,:3:2] = camera_world_matrix[:3:2,:3:2].dot(r.T)
-            # camera_world_matrix[0,0] = c; camera_world_matrix[0,2] = -s
-            # camera_world_matrix[2,0] = s; camera_world_matrix[2,2] = c
     on_resize(window, window_size[0], window_size[1])
 
     # sort nodes from front to back to avoid overdraw (assuming opaque objects):
@@ -250,8 +249,7 @@ def render(gltf, nodes, window_size,
 def vr_render_loop(vr_renderer=None, process_input=None,
                    window=None, window_size=None,
                    gltf=None, nodes=None):
-    gltfu.num_draw_calls = 0
-    nframes = 0
+    _nframes = 0
     dt_max = 0.0
     st = lt = glfw.GetTime()
     while not glfw.WindowShouldClose(window):
@@ -262,10 +260,10 @@ def vr_render_loop(vr_renderer=None, process_input=None,
         vr_renderer.process_input()
         vr_renderer.render(gltf, nodes, window_size)
         dt_max = max(dt, dt_max)
-        nframes += 1
+        _nframes += 1
         glfw.SwapBuffers(window)
-    return {'NUM FRAMES RENDERER': nframes,
-            'AVERAGE FPS': nframes / (t - st),
+    return {'NUM FRAMES RENDERER': _nframes,
+            'AVERAGE FPS': _nframes / (t - st),
             'MAX FRAME RENDER TIME': dt_max}
 
 

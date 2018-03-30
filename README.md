@@ -2,7 +2,7 @@
 
 This repository contains a collection of Python utilities and scripts for rendering and viewing 3D assets stored in the GL Transmission Format (glTF) file-format.
 
-- gltfview: the "main" package, a command-line utility which opens and interactively renders a glTF file
+- gltfview: the "main" package, a command-line utility which loads and interactively renders a glTF file
 
 - gltfutils: provides a set of routines for setting up and rendering the various OpenGL resources defined according to the glTF schema
 
