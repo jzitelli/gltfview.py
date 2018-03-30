@@ -98,7 +98,8 @@ def main():
               screenshot=args.screenshot,
               camera_position=args.camera_position,
               camera_rotation=args.camera_rotation,
-              filename=args.filename)
+              window_title='gltfview - %s' % os.path.split(args.filename)[-1],
+              screen_capture_prefix=os.path.splitext(os.path.split(args.filename)[-1])[0])
 
 
 if __name__ == "__main__":

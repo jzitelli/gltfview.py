@@ -47,9 +47,9 @@ def view_gltf(gltf, uri_path, scene_name=None,
               nframes=None,
               screenshot=None,
               camera_position=None, camera_rotation=None,
-              zfar=None, znear=None,
-              filename=None,
-              **kwargs):
+              zfar=1000.0, znear=0.01, yfov=0.660593,
+              window_title='gltfview',
+              screen_capture_prefix=None):
     _t0 = time.time()
     version = '1.0'
     generator = 'no generator was specified for this file'
@@ -67,9 +67,6 @@ def view_gltf(gltf, uri_path, scene_name=None,
         window_size = [800, 600]
     else:
         window_size = list(window_size)
-    window_title = 'gltfview'
-    if filename:
-        window_title += ' - %s' % filename
     window = setup_glfw(width=window_size[0], height=window_size[1],
                         double_buffered=not openvr, multisample=multisample,
                         window_title=window_title)
@@ -78,9 +75,7 @@ def view_gltf(gltf, uri_path, scene_name=None,
 
     camera = {'type': 'perspective',
               'perspective': {"aspectRatio": window_size[0]/window_size[1],
-                              "yfov": 0.660593,
-                              "zfar": zfar if zfar is not None else 1000.0,
-                              "znear": znear if znear is not None else 0.01}}
+                              "yfov": yfov, "zfar": zfar, "znear": znear}}
     projection_matrix = np.zeros((4,4), dtype=np.float32)
 
     def on_resize(window, width, height):
@@ -163,7 +158,7 @@ def view_gltf(gltf, uri_path, scene_name=None,
     nodes = sorted(nodes, key=lambda node: np.linalg.norm(camera_world_matrix[3, :3] - node['world_matrix'][3, :3]))
 
     process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window,
-                                   screen_capture_prefix=os.path.splitext(os.path.split(filename)[-1])[0] if filename else None)
+                                   screen_capture_prefix=screen_capture_prefix)
     _t1 = time.time()
     _dt = _t1 - _t0
     _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _dt);
