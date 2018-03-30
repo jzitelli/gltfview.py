@@ -25,7 +25,13 @@ setup(
         'Programming Language :: Python :: 3.6'
     ],
     keywords='virtual reality opengl gltf python pyopengl pyopenvr openvr vr vive',
-    install_requires=['numpy', 'pyopengl', 'pillow'], #'cyglfw3'
+    install_requires=[
+        'numpy',
+        'pillow',
+        'pyopengl',
+        'pyopengl-accelerate',
+        #'cyglfw3'
+    ],
     extras_require={'gltfutils': ['openvr']},
     package_data={'gltfutils': [path.join('shaders', filename)
                                 for filename in listdir(path.join('gltfutils', 'shaders'))

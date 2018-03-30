@@ -44,7 +44,7 @@ def view_gltf(gltf, uri_path, scene_name=None,
               multisample=None,
               nframes=None,
               screenshot=None,
-              camera_position=np.zeros(3, dtype=np.float32),
+              camera_position=None,
               **kwargs):
     _t0 = time.time()
     version = '1.0'
@@ -119,7 +119,6 @@ def view_gltf(gltf, uri_path, scene_name=None,
         _logger.error('could not load scene, now exiting...')
         exit(1)
 
-
     nodes = [gltf['nodes'][n] for n in scene['nodes']]
     for node in nodes:
         gltfu.update_world_matrices(node, gltf)
@@ -144,12 +143,15 @@ def view_gltf(gltf, uri_path, scene_name=None,
         gltfu.calc_perspective_projection(out=projection_matrix)
         camera_world_matrix = np.eye(4, dtype=np.float32)
 
+    if camera_position is not None:
+        _logger.info('setting camera position to %s', camera_position)
+        camera_world_matrix[3, :3] = camera_position
+
     # sort nodes from front to back to avoid overdraw (assuming opaque objects):
     nodes = sorted(nodes, key=lambda node: np.linalg.norm(camera_world_matrix[3, :3] - node['world_matrix'][3, :3]))
 
     process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window,
                                    move_speed=(170.0 if version.startswith('2.') else 1.7))
-
     _t1 = time.time()
     _dt = _t1 - _t0
     _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _dt);
@@ -166,9 +168,9 @@ def view_gltf(gltf, uri_path, scene_name=None,
     _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame)
 
 
-    _logger.info('''STARTING RENDER LOOP%s...''')
+    _logger.info('''STARTING RENDER LOOP...''')
     if nframes:
-        _logger.info("""''' * * * WILL RENDER %s FRAMES * * * '''""")
+        _logger.info("""''' * * * WILL RENDER %s FRAMES * * * '''""", nframes)
     stdout.flush()
 
     import gc; gc.collect() # does it do anything?
@@ -187,12 +189,10 @@ def view_gltf(gltf, uri_path, scene_name=None,
                                    camera_world_matrix=camera_world_matrix,
                                    projection_matrix=projection_matrix,
                                    nframes=nframes)
-
     _logger.info('''QUITING...
 
 %s
 ''', '\n'.join('  %21s: %s' % (k, v) for k, v in render_stats.items()))
-
     glfw.DestroyWindow(window)
     glfw.Terminate()
 
@@ -268,7 +268,6 @@ def setup_controls(window=None, camera_world_matrix=None,
                      C ----------------- capture screenshot
 
                      Esc --------------- quit
-
 ''')
     camera_position = camera_world_matrix[3, :3]
     camera_rotation = camera_world_matrix[:3, :3]

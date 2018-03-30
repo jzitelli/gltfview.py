@@ -55,15 +55,20 @@ def main():
     else:
         uri_prefix = os.path.dirname(args.filename)
 
-    nframes = args.nframes
-    if nframes is not None:
+    if args.nframes is not None:
         try:
-            nframes = int(nframes)
+            args.nframes = int(args.nframes)
         except TypeError:
-            _logger.error('%s is an invalid value for nframes', nframes)
+            _logger.error('%s is an invalid value for nframes', args.nframes)
             exit(1)
 
-    print(args)
+    if args.camera_position is not None:
+        try:
+            args.camera_position = tuple(float(x.strip()) for x in args.camera_position.split(','))
+        except Exception as err:
+            _logger.error('%s is an invalid value for camera-position', args.camera_position)
+            exit(1)
+
     try:
         gltf = json.loads(open(args.filename).read())
         _logger.info('loaded "%s"', args.filename)
@@ -75,8 +80,9 @@ def main():
 
     view_gltf(gltf, uri_prefix, openvr=args.openvr,
               multisample=int(args.msaa),
-              nframes=nframes,
-              screenshot=args.screenshot)
+              nframes=args.nframes,
+              screenshot=args.screenshot,
+              camera_position=args.camera_position)
 
 
 if __name__ == "__main__":
