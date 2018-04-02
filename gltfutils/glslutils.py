@@ -15,12 +15,10 @@ class RE(object):
     EXTENSION = re.compile(r'#extension\W+(?P<extension>\w+)')
     ALL = (DEFINE, IFDEF, IFNDEF, ELSE, ENDIF, VERSION, EXTENSION)
     ALL_PP = (DEFINE, IFDEF, IFNDEF, ELSE, ENDIF, VERSION, EXTENSION)
-    ATTR = re.compile(r'\W*attribute(?P<var>\w+)\W+(?P<typespec>\w+)\W*[;|(?P<initval>\w+)]')
-    ALL_GLSL = (ATTR,)
 
 
 _ATTRIBUTE_DECL_RE = re.compile(r"attribute\s+(?P<type_spec>\w+)\s+(?P<attribute_name>\w+)\s*;")
-_UNIFORM_DECL_RE =   re.compile(r"uniform\s+(?P<type_spec>\w+)\s+(?P<uniform_name>\w+)\s*(=\s*(?P<initialization>.*)\s*;|;)")
+_UNIFORM_DECL_RE =   re.compile(r"uniform\s+(?P<type_spec>\w+)\s+(?P<uniform_name>\w+)(\[\d*\])?\s*(=\s*(?P<initialization>.*)\s*;|;)")
 
 
 def preprocess(glsl, defines=None):
@@ -34,7 +32,7 @@ def preprocess(glsl, defines=None):
              if l}
     preprocessed = {}
     pp_matches = {i: m for i, m in ((i, next((m for m in (rex.match(l) for rex in RE.ALL) if m), None))
-                                     for i, l in lines.items())
+                                    for i, l in lines.items())
                   if m}
     stack = deque()
     version = '130'
