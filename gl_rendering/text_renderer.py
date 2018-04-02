@@ -22,6 +22,7 @@ class TextRenderer(object):
     def __init__(self,
                  font_file=os.path.join(_here, 'fonts', 'VeraMono.ttf'),
                  size=128*16):
+        _logger.debug('loading %s...', font_file)
         self._face = Face(font_file)
         self._face.set_char_size(size)
         width, max_asc, max_desc = 0, 0, 0
@@ -172,7 +173,7 @@ if __name__ == "__main__":
     pil_logger = logging.getLogger('PIL')
     pil_logger.setLevel(logging.WARNING)
 
-    text_drawer = TextRenderer('VeraMono.ttf')
+    text_drawer = TextRenderer()
 
     import cyglfw3 as glfw
     glfw.Init()
