@@ -308,6 +308,7 @@ def set_material_state(material_name, gltf):
     if set_material_state.current_material == material_name:
         return
     set_material_state.current_material = material_name
+    set_material_state.n_tex = 0
     material = gltf['materials'][material_name]
     set_technique_state(material['technique'], gltf)
     technique = gltf['techniques'][material['technique']]

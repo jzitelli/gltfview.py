@@ -1,7 +1,6 @@
 from sys import stdout, exit
 from collections import defaultdict
 import time
-import os.path
 import logging
 
 import numpy as np
@@ -20,6 +19,7 @@ try:
 except ImportError as err:
     _logger.warning('could not import OpenVRRenderer:\n%s', err)
     OpenVRRenderer = None
+from gl_rendering.text_renderer import TextRenderer
 
 
 def setup_glfw(width=800, height=600, double_buffered=False, multisample=None, window_title='gltfview'):
@@ -49,7 +49,8 @@ def view_gltf(gltf, uri_path, scene_name=None,
               camera_position=None, camera_rotation=None,
               zfar=1000.0, znear=0.01, yfov=0.660593,
               window_title='gltfview',
-              screen_capture_prefix=None):
+              screen_capture_prefix=None,
+              display_fps=False):
     _t0 = time.time()
     version = '1.0'
     generator = 'no generator was specified for this file'
@@ -85,7 +86,6 @@ def view_gltf(gltf, uri_path, scene_name=None,
                                      aspectRatio=window_size[0] / max(5, window_size[1]))
     glfw.SetWindowSizeCallback(window, on_resize)
 
-
     def init_scene_v1(gltf, uri_path):
         shader_ids = gltfu.setup_shaders(gltf, uri_path)
         gltfu.setup_programs(gltf, shader_ids)
@@ -120,7 +120,6 @@ def view_gltf(gltf, uri_path, scene_name=None,
     if scene is None:
         _logger.error('could not load scene, now exiting...')
         exit(1)
-
 
     nodes = [gltf['nodes'][n] for n in scene['nodes']]
     for node in nodes:
@@ -160,8 +159,12 @@ def view_gltf(gltf, uri_path, scene_name=None,
     process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window,
                                    screen_capture_prefix=screen_capture_prefix)
     _t1 = time.time()
-    _dt = _t1 - _t0
-    _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _dt);
+    _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _t1 - _t0);
+
+    text_renderer = None
+    if display_fps:
+        text_renderer = TextRenderer()
+        text_renderer.init_gl()
 
     # BURNER FRAME:
     gltfu.num_draw_calls = 0
@@ -194,7 +197,8 @@ def view_gltf(gltf, uri_path, scene_name=None,
                                    gltf=gltf, nodes=nodes,
                                    camera_world_matrix=camera_world_matrix,
                                    projection_matrix=projection_matrix,
-                                   nframes=nframes)
+                                   nframes=nframes,
+                                   display_fps=display_fps, text_renderer=text_renderer)
     _logger.info('''QUITING...
 
 %s
@@ -206,7 +210,8 @@ def view_gltf(gltf, uri_path, scene_name=None,
 def render_loop(process_input=None, window=None, window_size=None,
                 gltf=None, nodes=None,
                 camera_world_matrix=None, projection_matrix=None,
-                nframes=None):
+                nframes=None,
+                display_fps=False, text_renderer=None):
     _nframes = 0
     dt_max = 0.0
     lt = st = glfw.GetTime()
@@ -219,6 +224,10 @@ def render_loop(process_input=None, window=None, window_size=None,
         render(gltf, nodes, window_size,
                camera_world_matrix=camera_world_matrix,
                projection_matrix=projection_matrix)
+        if text_renderer is not None and display_fps:
+            text_renderer.draw_text('%f' % (1 / dt),
+                                    color=(1.0, 0.2, 0.2, 0.0),
+                                    screen_position=(0.1, 0.1))
         _nframes += 1
         glfw.SwapBuffers(window)
     return {'NUM FRAMES RENDERED': _nframes,
@@ -234,6 +243,7 @@ def render(gltf, nodes, window_size,
     gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
     gltfu.set_material_state.current_material = None
     gltfu.set_technique_state.current_technique = None
+    gltfu.set_technique_state.n_tex = 0
     for node in nodes:
         gltfu.draw_node(node, gltf,
                         projection_matrix=projection_matrix,

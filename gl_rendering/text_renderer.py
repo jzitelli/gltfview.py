@@ -27,7 +27,6 @@ class TextRenderer(object):
         self._face.set_char_size(size)
         width, max_asc, max_desc = 0, 0, 0
         widths = []
-        self._num_chars = 128 - 32
         for c in range(32, 128):
             self._face.load_char(chr(c), FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT)
             bitmap = self._face.glyph.bitmap
@@ -40,12 +39,6 @@ class TextRenderer(object):
         self._width = width
         self._height = max_asc + max_desc
         self._read_shader_src()
-        self._i_char = {}
-        for j in range(6):
-            for i in range(16):
-                i_char = j * 16 + i
-                char = chr(32 + i_char)
-                self._i_char[char] = i_char
         self._screen_size = (800.0, 600.0)
         self._texcoords = np.zeros((32, 2), dtype=np.float32)
         self._gl_initialized = False
@@ -56,6 +49,7 @@ class TextRenderer(object):
     def init_gl(self):
         if self._gl_initialized:
             return
+        self._texture_unit = 4
         vs_id = gl.glCreateShader(gl.GL_VERTEX_SHADER)
         gl.glShaderSource(vs_id, self._VERT_SHADER_SRC)
         gl.glCompileShader(vs_id)
@@ -80,24 +74,21 @@ class TextRenderer(object):
                                      for attribute in self._ATTRIBUTES}
         self._uniform_locations = {uniform: gl.glGetUniformLocation(self._program_id, uniform)
                                    for uniform in self._UNIFORMS}
-        face, width, height = self._face, self._width, self._height
+        width, height = self._width, self._height
         self._image_width, self._image_height = image_width, image_height = width * 16, height * 6
-        #self._image_width, self._image_height = image_width, image_height
-        bitmap_buffer = np.empty((image_height, image_width), dtype=np.ubyte)
-        i_char_to_texcoords = []
+        bitmap_buffer = np.zeros((image_height, image_width), dtype=np.ubyte)
+        self._char_to_texcoords = {}
         for j in range(6):
             for i in range(16):
                 i_char = j * 16 + i
                 char = chr(32 + i_char)
-                face.load_char(char, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT)
-                glyph = face.glyph
+                self._char_to_texcoords[char] = (i / 16.0, j / 6.0)
+                self._face.load_char(char, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT)
+                glyph = self._face.glyph
                 bitmap = glyph.bitmap
                 x = i*width + glyph.bitmap_left
                 y = j*height + self._max_asc - glyph.bitmap_top
-                i_char_to_texcoords.append((x / bitmap_buffer.shape[1],
-                                            j*height / bitmap_buffer.shape[0]))
                 bitmap_buffer[y:y+bitmap.rows,x:x+bitmap.width].flat = bitmap.buffer
-        self._i_char_to_texcoords = np.array(i_char_to_texcoords, dtype=np.float32)
         self._texture_id = gl.glGenTextures(1)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture_id)
         self._sampler_id = gl.glGenSamplers(1)
@@ -105,17 +96,17 @@ class TextRenderer(object):
         gl.glSamplerParameteri(self._sampler_id, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
         gl.glSamplerParameteri(self._sampler_id, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_EDGE)
         gl.glSamplerParameteri(self._sampler_id, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
+        gl.glBindSampler(self._texture_unit, self._sampler_id)
         gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
-        #image = Image.new('L', (a.shape[1], a.shape[0]))
-        #image.putdata(list(a.ravel())); #image = image.transpose(Image.FLIP_TOP_BOTTOM)
-        #image.save('font.png')
+        # image = Image.new('L', (bitmap_buffer.shape[1], bitmap_buffer.shape[0]))
+        # image.putdata(list(bitmap_buffer.ravel()))
+        # image.save('font.png')
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0,
                         gl.GL_RED,
                         image_width, image_height, 0,
                         gl.GL_RED, gl.GL_UNSIGNED_BYTE,
                         bitmap_buffer)
-                        #np.array(list(image.getdata()), dtype=np.ubyte))
-        gl.glGenerateMipmap(gl.GL_TEXTURE_2D)
+        #gl.glGenerateMipmap(gl.GL_TEXTURE_2D)
         gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create font texture')
@@ -126,10 +117,10 @@ class TextRenderer(object):
                   color=(1.0, 1.0, 0.0, 0.0),
                   screen_position=(0.0, 0.0)):
         gl.glUseProgram(self._program_id)
-        gl.glActiveTexture(gl.GL_TEXTURE0+0)
+        gl.glActiveTexture(gl.GL_TEXTURE0+self._texture_unit)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture_id)
-        gl.glBindSampler(0, self._sampler_id)
-        gl.glUniform1i(self._uniform_locations['u_fonttex'], 0)
+        #gl.glBindSampler(tex_unit, self._sampler_id)
+        gl.glUniform1i(self._uniform_locations['u_fonttex'], self._texture_unit)
         gl.glUniform4f(self._uniform_locations['u_color'], *color)
         gl.glUniform2f(self._uniform_locations['u_screen_size'], *self._screen_size)
         gl.glUniform2f(self._uniform_locations['u_char_size'], self._width, self._height)
@@ -137,7 +128,7 @@ class TextRenderer(object):
         gl.glUniform2f(self._uniform_locations['u_fonttex_size'], self._image_width, self._image_height)
         nchars = len(text)
         gl.glUniform1ui(self._uniform_locations['u_nchars'], nchars)
-        self._texcoords[:nchars] = [self._i_char_to_texcoords[self._i_char[c]] for c in text]
+        self._texcoords[:nchars] = [self._char_to_texcoords[c] for c in text]
         gl.glUniform2fv(self._uniform_locations['u_texcoords'], nchars, self._texcoords)
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
@@ -166,51 +157,50 @@ class TextRenderer(object):
 
 
 if __name__ == "__main__":
+    import cyglfw3 as glfw
     _DEBUG_LOGGING_FORMAT = '%(asctime).19s [%(levelname)s]%(name)s.%(funcName)s:%(lineno)d: %(message)s'
     logging.basicConfig(format=_DEBUG_LOGGING_FORMAT, level=logging.DEBUG)
     opengl_logger = logging.getLogger('OpenGL')
     opengl_logger.setLevel(logging.INFO)
     pil_logger = logging.getLogger('PIL')
     pil_logger.setLevel(logging.WARNING)
-
     text_drawer = TextRenderer()
-
-    import cyglfw3 as glfw
     glfw.Init()
     w, h = 800, 600
-    window = glfw.CreateWindow(w, h, 'text.py')
+    window = glfw.CreateWindow(w, h, os.path.basename(__file__))
     glfw.MakeContextCurrent(window)
-
     gl.glClearColor(0.1, 0.1, 0.2, 0.0)
-    gl.glViewport(0, 0, w, h)
-
     text_drawer.init_gl()
-
     def on_keydown(window, key, scancode, action, mods):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
             glfw.SetWindowShouldClose(window, gl.GL_TRUE)
-        elif action == glfw.PRESS:
-            pass
-        elif action == glfw.RELEASE:
-            pass
     glfw.SetKeyCallback(window, on_keydown)
-
     def on_resize(window, width, height):
         gl.glViewport(0, 0, width, height)
+        gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         text_drawer.set_screen_size((width, height))
     glfw.SetWindowSizeCallback(window, on_resize)
     on_resize(window, w, h)
-
     _logger.debug('starting render loop...')
-
+    nframes = 0
+    dt = float('inf')
+    avg_fps = 0.0
+    t = lt = st = glfw.GetTime();
     while not glfw.WindowShouldClose(window):
         glfw.PollEvents()
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        text_drawer.draw_text('TESTING123', screen_position=(0.1, 0.1))
-        text_drawer.draw_text('TESTING123', screen_position=(0.21, 0.21))
-        text_drawer.draw_text('TESTING123', screen_position=(0.7, 0.15))
         text_drawer.draw_text('TESTING123', screen_position=(0.5, 0.5))
+        text_drawer.draw_text('fps: %f' % (1.0 / dt),
+                              screen_position=(abs(np.sin(0.01 * (t - st))),
+                                               abs(np.sin(0.1 * (t - st)))))
+        text_drawer.draw_text('avg fps: %f' % avg_fps,
+                              screen_position=(abs(np.sin(0.07 * (t - st))),
+                                               abs(np.cos(0.3 * (t - st)))),
+                              color=(1.0, 0.0, 0.0, 0.0))
         glfw.SwapBuffers(window)
-
+        t = glfw.GetTime(); dt = t - lt; lt = t
+        nframes += 1
+        avg_fps = nframes / (t - st)
+    _logger.debug('avg fps: %f', avg_fps)
     glfw.DestroyWindow(window)
     glfw.Terminate()

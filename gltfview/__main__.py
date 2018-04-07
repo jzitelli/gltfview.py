@@ -19,7 +19,7 @@ def parse_args():
                         help='prefix for relative path URIs (defaults to the directory of the glTF file)',
                         default=None)
     parser.add_argument("-a", "--msaa",
-                        help='enable multi-sample anti-aliasing (disabled by default) at the specified level (1, 2, or 4)',
+                        help='enable multi-sampled anti-aliasing (disabled by default) at the specified level (1, 2, or 4)',
                         default=0)
     parser.add_argument("--openvr",
                         help="view in VR",
@@ -39,6 +39,9 @@ def parse_args():
     parser.add_argument('--camera-rotation',
                         help='rotation of the camera (specified in Euler angles) in world space',
                         default=None)
+    parser.add_argument('--display-fps',
+                        help='display realtime FPS',
+                        action='store_true')
     return parser.parse_args()
 
 
@@ -46,8 +49,8 @@ def main():
     args = parse_args()
     if args.verbose:
         logging.basicConfig(format=_DEBUG_LOGGING_FORMAT, level=logging.DEBUG)
-        opengl_logger = logging.getLogger('OpenGL')
-        opengl_logger.setLevel(logging.INFO)
+        #opengl_logger = logging.getLogger('OpenGL')
+        #opengl_logger.setLevel(logging.INFO)
         pil_logger = logging.getLogger('PIL')
         pil_logger.setLevel(logging.WARNING)
     else:
@@ -99,7 +102,8 @@ def main():
               camera_position=args.camera_position,
               camera_rotation=args.camera_rotation,
               window_title='gltfview - %s' % os.path.split(args.filename)[-1],
-              screen_capture_prefix=os.path.splitext(os.path.split(args.filename)[-1])[0])
+              screen_capture_prefix=os.path.splitext(os.path.split(args.filename)[-1])[0],
+              display_fps=args.display_fps)
 
 
 if __name__ == "__main__":
