@@ -49,8 +49,8 @@ def main():
     args = parse_args()
     if args.verbose:
         logging.basicConfig(format=_DEBUG_LOGGING_FORMAT, level=logging.DEBUG)
-        #opengl_logger = logging.getLogger('OpenGL')
-        #opengl_logger.setLevel(logging.INFO)
+        opengl_logger = logging.getLogger('OpenGL')
+        opengl_logger.setLevel(logging.INFO)
         pil_logger = logging.getLogger('PIL')
         pil_logger.setLevel(logging.WARNING)
     else:

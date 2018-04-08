@@ -21,8 +21,9 @@ class TextRenderer(object):
 
     def __init__(self,
                  font_file=os.path.join(_here, 'fonts', 'VeraMono.ttf'),
-                 size=128*16):
+                 size=72*16):
         _logger.debug('loading %s...', font_file)
+        self._font_file = font_file
         self._face = Face(font_file)
         self._face.set_char_size(size)
         width, max_asc, max_desc = 0, 0, 0
@@ -98,9 +99,6 @@ class TextRenderer(object):
         gl.glSamplerParameteri(self._sampler_id, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_EDGE)
         gl.glBindSampler(self._texture_unit, self._sampler_id)
         gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
-        # image = Image.new('L', (bitmap_buffer.shape[1], bitmap_buffer.shape[0]))
-        # image.putdata(list(bitmap_buffer.ravel()))
-        # image.save('font.png')
         gl.glTexImage2D(gl.GL_TEXTURE_2D, 0,
                         gl.GL_RED,
                         image_width, image_height, 0,
@@ -134,6 +132,29 @@ class TextRenderer(object):
         gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
         gl.glDisable(gl.GL_BLEND)
+
+    def save_image(self, filename=None):
+        from PIL import Image
+        if filename is None:
+            filename = os.path.split_ext(os.path.basename(self._font_file))[0] + '.png'
+        _logger.debug('filename = %s', filename)
+        width, height = self._width, self._height
+        image_width, image_height = width * 16, height * 6
+        bitmap_buffer = np.zeros((image_height, image_width), dtype=np.ubyte)
+        for j in range(6):
+            for i in range(16):
+                i_char = j * 16 + i
+                char = chr(32 + i_char)
+                self._face.load_char(char, FT_LOAD_RENDER | FT_LOAD_FORCE_AUTOHINT)
+                glyph = self._face.glyph
+                bitmap = glyph.bitmap
+                x = i*width + glyph.bitmap_left
+                y = j*height + self._max_asc - glyph.bitmap_top
+                bitmap_buffer[y:y+bitmap.rows,x:x+bitmap.width].flat = bitmap.buffer
+        image = Image.new('L', (bitmap_buffer.shape[1], bitmap_buffer.shape[0]))
+        image.putdata(list(bitmap_buffer.ravel()))
+        image.save(filename)
+        _logger.info('...saved to %s', filename)
 
     @classmethod
     def _read_shader_src(cls):

@@ -1,4 +1,4 @@
-from sys import stdout, exit
+from sys import stdout
 from collections import defaultdict
 import time
 import logging
@@ -52,18 +52,6 @@ def view_gltf(gltf, uri_path, scene_name=None,
               screen_capture_prefix=None,
               display_fps=False):
     _t0 = time.time()
-    version = '1.0'
-    generator = 'no generator was specified for this file'
-    if 'asset' in gltf:
-        asset = gltf['asset']
-        version = asset['version']
-        generator = asset.get('generator', generator)
-    _logger.info('''
-
-  INITIALIZING FOR GLTF VERSION %s...
-    GENERATOR: %s
-
-''', version, generator)
     if window_size is None:
         window_size = [800, 600]
     else:
@@ -86,55 +74,11 @@ def view_gltf(gltf, uri_path, scene_name=None,
                                      aspectRatio=window_size[0] / max(5, window_size[1]))
     glfw.SetWindowSizeCallback(window, on_resize)
 
-    def init_scene_v1(gltf, uri_path):
-        shader_ids = gltfu.setup_shaders(gltf, uri_path)
-        gltfu.setup_programs(gltf, shader_ids)
-        gltfu.setup_textures(gltf, uri_path)
-        gltfu.setup_buffers(gltf, uri_path)
-        if scene_name and scene_name in gltf.get('scenes', {}):
-            scene = gltf['scenes'][scene_name]
-        else:
-            scene = list(gltf['scenes'].values())[0]
-        return scene
+    root_nodes, nodes, meshes = gltfu.init_scene(gltf, uri_path, scene_name=scene_name)
+    mesh_bounds = [gltfu.find_mesh_bounds(mesh, gltf) for mesh in meshes]
+    _logger.debug('mesh bounds:\n%s', '\n'.join(['%s: %s' % item for mb in mesh_bounds for item in mb.items()]))
 
-    def init_scene_v2(gltf, uri_path):
-        gltfu.backport_pbrmr_materials(gltf)
-        shader_ids = gltfu.setup_shaders(gltf, uri_path)
-        gltfu.setup_programs(gltf, shader_ids)
-        gltfu.setup_textures_v2(gltf, uri_path)
-        gltfu.setup_buffers_v2(gltf, uri_path)
-        if scene_name and scene_name < len(gltf.get('scenes', [])):
-            scene = gltf['scenes'][scene_name]
-        else:
-            scene = gltf['scenes'][0]
-        return scene
-
-    if version.startswith('1.'):
-        scene = init_scene_v1(gltf, uri_path)
-    else:
-        if not version.startswith('2.'):
-            _logger.warning('''unknown GLTF version: %s
-            ...will try loading as 2.0...
-            ''')
-        scene = init_scene_v2(gltf, uri_path)
-    if scene is None:
-        _logger.error('could not load scene, now exiting...')
-        exit(1)
-
-    nodes = [gltf['nodes'][n] for n in scene['nodes']]
-    for node in nodes:
-        gltfu.update_world_matrices(node, gltf)
-
-    def find_camera_node(gltf, nodes):
-        for n in nodes:
-            if 'camera' in gltf['nodes'][n]:
-                return gltf['nodes'][n]
-            if 'children' in gltf['nodes'][n]:
-                node = find_camera_node(gltf, gltf['nodes'][n]['children'])
-                if node is not None:
-                    return node
-
-    camera_node = find_camera_node(gltf, scene['nodes'])
+    camera_node = next((node for node in nodes if 'camera' in node), None)
     if camera_node is not None:
         camera = gltf['cameras'][camera_node['camera']]
         _logger.info('found camera: %s', camera)
@@ -142,6 +86,7 @@ def view_gltf(gltf, uri_path, scene_name=None,
     else:
         _logger.info('no camera specified, using default')
         camera_world_matrix = np.eye(4, dtype=np.float32)
+
     if camera_position is not None:
         _logger.info('setting camera position to %s', camera_position)
         camera_world_matrix[3, :3] = camera_position
@@ -151,20 +96,22 @@ def view_gltf(gltf, uri_path, scene_name=None,
             r = np.array([[c, -s],
                           [s,  c]], dtype=np.float32)
             camera_world_matrix[:3:2,:3:2] = camera_world_matrix[:3:2,:3:2].dot(r.T)
-    on_resize(window, window_size[0], window_size[1])
 
     # sort nodes from front to back to avoid overdraw (assuming opaque objects):
     nodes = sorted(nodes, key=lambda node: np.linalg.norm(camera_world_matrix[3, :3] - node['world_matrix'][3, :3]))
 
+    on_resize(window, window_size[0], window_size[1])
+
     process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window,
                                    screen_capture_prefix=screen_capture_prefix)
-    _t1 = time.time()
-    _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _t1 - _t0);
 
     text_renderer = None
     if display_fps:
         text_renderer = TextRenderer()
         text_renderer.init_gl()
+
+    _t1 = time.time()
+    _logger.info('''...INITIALIZATION COMPLETE (took %s seconds)''', _t1 - _t0);
 
     # BURNER FRAME:
     gltfu.num_draw_calls = 0
@@ -227,7 +174,7 @@ def render_loop(process_input=None, window=None, window_size=None,
         if text_renderer is not None and display_fps:
             text_renderer.draw_text('%f' % (1 / dt),
                                     color=(1.0, 0.2, 0.2, 0.0),
-                                    screen_position=(0.1, 0.1))
+                                    screen_position=(0.005, 0.005))
         _nframes += 1
         glfw.SwapBuffers(window)
     return {'NUM FRAMES RENDERED': _nframes,

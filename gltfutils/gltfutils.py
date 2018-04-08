@@ -203,15 +203,16 @@ def setup_textures_v2(gltf, uri_path):
             gl.glSamplerParameteri(sampler_id, gl.GL_TEXTURE_WRAP_T, sampler.get('wrapT', 10497))
             sampler['id'] = sampler_id
         gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
-        internal_format = gl.GL_RGB
         if pil_image.mode == 'RGBA':
             internal_format = gl.GL_RGBA
-        #elif pil_image.mode == 'R':
-        #    internal_format = gl.GL_R
+        elif pil_image.mode == 'L':
+            internal_format = gl.GL_RED
+        else:
+            internal_format = gl.GL_RGB
         gl.glTexImage2D(target, 0,
                         internal_format,
                         pil_image.width, pil_image.height, 0,
-                        gl.GL_RGB if pil_image.mode == 'RGB' else gl.GL_RGBA,
+                        internal_format,
                         texture['type'],
                         np.array(list(pil_image.getdata()),
                                  dtype=(np.ubyte if texture['type'] == gl.GL_UNSIGNED_BYTE else np.ushort)))
@@ -280,8 +281,148 @@ def setup_buffers_v2(gltf, uri_path):
         _logger.debug('created bufferView %s', i if 'name' not in bufferView else '%d ("%s")' % (i, bufferView['name']))
 
 
+def _setup_vertex_array_objects_for_primitive(primitive, gltf):
+    if 'vao' in primitive:
+        return
+    enabled_locations = []
+    buffer_id = None
+    vao = gl.glGenVertexArrays(1)
+    gl.glBindVertexArray(vao)
+    material = gltf['materials'][primitive['material']]
+    technique = gltf['techniques'][material['technique']]
+    program = gltf['programs'][technique['program']]
+    accessor_names = primitive['attributes']
+    for attribute_name, parameter_name in technique['attributes'].items():
+        location = program['attribute_locations'][attribute_name]
+        parameter = technique['parameters'][parameter_name]
+        if 'semantic' in parameter:
+            semantic = parameter['semantic']
+            if semantic in accessor_names:
+                accessor = gltf['accessors'][accessor_names[semantic]]
+                bufferView = gltf['bufferViews'][accessor['bufferView']]
+                if buffer_id != bufferView['id']:
+                    buffer_id = bufferView['id']
+                    target = bufferView.get('target', gl.GL_ARRAY_BUFFER)
+                    buffer_id = bufferView['id']
+                    gl.glBindBuffer(target, buffer_id)
+                gl.glEnableVertexAttribArray(location)
+                enabled_locations.append(location)
+                gl.glVertexAttribPointer(location,
+                                         GLTF_BUFFERVIEW_TYPE_SIZES[accessor['type']],
+                                         accessor['componentType'], False,
+                                         accessor.get('byteStride', # GLTF 1.0
+                                                      bufferView.get('byteStride', 0)), # GLTF 2.0
+                                         c_void_p(accessor.get('byteOffset', 0)))
+            else:
+                raise Exception('expected a semantic property for attribute "%s", parameter "%s"' %
+                                (attribute_name, parameter_name))
+    gl.glBindVertexArray(0)
+    for location in enabled_locations:
+        gl.glDisableVertexAttribArray(location)
+    primitive['vao'] = vao
+
+
+def setup_vertex_array_objects(gltf, mesh):
+    for primitive in mesh['primitives']:
+        _setup_vertex_array_objects_for_primitive(primitive, gltf)
+
+
+def find_mesh_bounds(mesh, gltf):
+    bounds = {}
+    for primitive in mesh['primitives']:
+        material = gltf['materials'][primitive['material']]
+        technique = gltf['techniques'][material['technique']]
+        accessor_names = primitive['attributes']
+        for attribute_name, parameter_name in technique['attributes'].items():
+            parameter = technique['parameters'][parameter_name]
+            if 'semantic' in parameter:
+                semantic = parameter['semantic']
+                if semantic in accessor_names:
+                    accessor = gltf['accessors'][accessor_names[semantic]]
+                    if ('min' in accessor or 'max' in accessor) and semantic not in bounds:
+                        ndim = GLTF_BUFFERVIEW_TYPE_SIZES[accessor['type']]
+                        bounds[semantic] = np.array([ndim*[float('inf')], ndim*[float('-inf')]],
+                                                    dtype=np.float32)
+                    if 'min' in accessor:
+                        bounds[semantic][0] = np.minimum(bounds[semantic][0], accessor['min'])
+                    if 'max' in accessor:
+                        bounds[semantic][1] = np.maximum(bounds[semantic][1], accessor['max'])
+    return bounds
+
+
+def init_scene_v1(gltf, uri_path, scene_name=None):
+    shader_ids = setup_shaders(gltf, uri_path)
+    setup_programs(gltf, shader_ids)
+    setup_textures(gltf, uri_path)
+    setup_buffers(gltf, uri_path)
+
+
+def init_scene_v2(gltf, uri_path, scene_name=None):
+    backport_pbrmr_materials(gltf)
+    shader_ids = setup_shaders(gltf, uri_path)
+    setup_programs(gltf, shader_ids)
+    setup_textures_v2(gltf, uri_path)
+    setup_buffers_v2(gltf, uri_path)
+
+
+def init_scene(gltf, uri_path, scene_name=None):
+    version = gltf.get('asset', {'version': '1.0'})['version']
+    generator = gltf.get('asset', {'generator': 'no generator was specified for this file'})['generator']
+    _logger.info('''
+
+  INITIALIZING FOR GLTF VERSION %s...
+    GENERATOR: %s
+
+''', version, generator)
+    if version.startswith('1.'):
+        init_scene_v1(gltf, uri_path, scene_name=scene_name)
+        scenes = gltf.get('scenes', {})
+        if scene_name and scene_name in scenes:
+            scene = scenes[scene_name]
+        else:
+            nodes_dict = dict(gltf.get('nodes', {}))
+            for node_name, node in gltf.get('nodes', {}).items():
+                for child_name in node.get('children', []):
+                    if child_name in nodes_dict:
+                        nodes_dict.pop(child_name)
+            scene = next((scene for scene in scenes.values()), {'nodes': list(nodes_dict.keys())})
+        all_meshes = gltf.get('meshes', {})
+        nodes = [gltf['nodes'][n] for n in scene['nodes']]
+        flattened_nodes = flatten_nodes(nodes, gltf)
+        flattened_meshes = [all_meshes[m] for node in flattened_nodes for m in node.get('meshes', [])]
+    else:
+        if not version.startswith('2.'):
+            _logger.warning('''unknown GLTF version: %s
+            ...will try loading as 2.0...
+            ''', version)
+        init_scene_v2(gltf, uri_path, scene_name=scene_name)
+        scenes = gltf.get('scenes', [])
+        if scene_name and scene_name < len(scenes):
+            scene = scenes[scene_name]
+        else:
+            root_nodes = set(range(len(gltf.get('nodes', []))))
+            for i_node, node in enumerate(gltf.get('nodes', [])):
+                for i_child in node.get('children', []):
+                    if i_child in root_nodes:
+                        root_nodes.remove(i_child)
+            scene = next((scene for scene in scenes), {'nodes': list(root_nodes)})
+        all_meshes = gltf.get('meshes', [])
+        nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
+        flattened_nodes = flatten_nodes(nodes, gltf)
+        flattened_meshes = [all_meshes[node['mesh']] for node in flattened_nodes if 'mesh' in node]
+    _logger.debug('''
+    number of root nodes in scene: %d
+    number of nodes in scene: %d
+    number of meshes in scene: %d''', len(nodes), len(flattened_nodes), len(flattened_meshes))
+    for mesh in flattened_meshes:
+        setup_vertex_array_objects(gltf, mesh)
+    for node in nodes:
+        update_world_matrices(node, gltf)
+    return nodes, flattened_nodes, flattened_meshes
+
+
 def set_technique_state(technique_name, gltf):
-    if set_technique_state.current_technique is not None and set_technique_state.current_technique == technique_name:
+    if set_technique_state.current_technique == technique_name:
         return
     set_technique_state.current_technique = technique_name
     technique = gltf['techniques'][technique_name]
@@ -380,9 +521,6 @@ def set_draw_state(primitive, gltf,
     material = gltf['materials'][primitive['material']]
     technique = gltf['techniques'][material['technique']]
     program = gltf['programs'][technique['program']]
-    accessors = gltf['accessors']
-    bufferViews = gltf['bufferViews']
-    accessor_names = primitive['attributes']
     for uniform_name, parameter_name in technique['uniforms'].items():
         parameter = technique['parameters'][parameter_name]
         if 'semantic' in parameter:
@@ -421,39 +559,6 @@ def set_draw_state(primitive, gltf,
             else:
                 raise Exception('unhandled semantic for uniform "%s": %s' %
                                 (uniform_name, parameter['semantic']))
-    if 'vao' not in primitive:
-        enabled_locations = []
-        buffer_id = None
-        vao = gl.glGenVertexArrays(1)
-        gl.glBindVertexArray(vao)
-        for attribute_name, parameter_name in technique['attributes'].items():
-            parameter = technique['parameters'][parameter_name]
-            if 'semantic' in parameter:
-                semantic = parameter['semantic']
-                if semantic in accessor_names:
-                    accessor = accessors[accessor_names[semantic]]
-                    bufferView = bufferViews[accessor['bufferView']]
-                    location = program['attribute_locations'][attribute_name]
-                    if buffer_id != bufferView['id']:
-                        buffer_id = bufferView['id']
-                        if 'target' not in bufferView:
-                            bufferView['target'] = gl.GL_ARRAY_BUFFER
-                        gl.glBindBuffer(bufferView['target'], buffer_id)
-                    gl.glEnableVertexAttribArray(location)
-                    enabled_locations.append(location)
-                    componentType = accessor['componentType']
-                    gl.glVertexAttribPointer(location, GLTF_BUFFERVIEW_TYPE_SIZES[accessor['type']],
-                                             componentType, False,
-                                             accessor.get('byteStride', # GLTF 1.0
-                                                          bufferView.get('byteStride', 0)), # GLTF 2.0
-                                             c_void_p(accessor.get('byteOffset', 0)))
-                else:
-                    raise Exception('expected a semantic property for attribute "%s", parameter "%s"' %
-                                    (attribute_name, parameter_name))
-        primitive['vao'] = vao
-        gl.glBindVertexArray(0)
-        for location in enabled_locations:
-            gl.glDisableVertexAttribArray(location)
     gl.glBindVertexArray(primitive['vao'])
     if CHECK_GL_ERRORS:
         if gl.glGetError() != gl.GL_NO_ERROR:
@@ -588,6 +693,18 @@ def update_world_matrices(node, gltf, world_matrix=None):
     if 'children' in node:
         for child in [gltf['nodes'][n] for n in node['children']]:
             update_world_matrices(child, gltf, world_matrix=world_matrix)
+
+
+def flatten_nodes(nodes, gltf, flat=None):
+    from itertools import chain
+    all_nodes = gltf.get('nodes', {})
+    def find_all_descendents(node):
+        children = [all_nodes[c] for c in node.get('children', [])]
+        return children + list(chain.from_iterable(find_all_descendents(child) for child in children))
+        # descendents = list(children)
+        # for child in children:
+        #     descendents += find_all_descendents(child)
+    return list(chain(nodes, chain.from_iterable(find_all_descendents(node) for node in nodes)))
 
 
 def calc_projection_matrix(camera, out=None, **kwargs):
