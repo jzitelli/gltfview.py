@@ -345,6 +345,17 @@ def init_scene(gltf, uri_path, scene_name=None):
         setup_programs(gltf, shader_ids)
         setup_textures(gltf, uri_path)
         setup_buffers(gltf, uri_path)
+        scenes = gltf.get('scenes', {})
+        if scene_name and scene_name in scenes:
+            return scenes[scene_name]
+        else:
+            # return a constructed scene containing all root nodes:
+            nodes_dict = dict(gltf.get('nodes', {}))
+            for node_name, node in gltf.get('nodes', {}).items():
+                for child_name in node.get('children', []):
+                    if child_name in nodes_dict:
+                        nodes_dict.pop(child_name)
+            return next((scene for scene in scenes.values()), {'nodes': list(nodes_dict.keys())})
 
     def _init_scene_v2(gltf, uri_path, scene_name=None):
         backport_pbrmr_materials(gltf)
@@ -352,54 +363,34 @@ def init_scene(gltf, uri_path, scene_name=None):
         setup_programs(gltf, shader_ids)
         setup_textures_v2(gltf, uri_path)
         setup_buffers_v2(gltf, uri_path)
-
-    if version.startswith('1.'):
-        _init_scene_v1(gltf, uri_path, scene_name=scene_name)
-        scenes = gltf.get('scenes', {})
-        if scene_name and scene_name in scenes:
-            scene = scenes[scene_name]
-        else:
-            nodes_dict = dict(gltf.get('nodes', {}))
-            for node_name, node in gltf.get('nodes', {}).items():
-                for child_name in node.get('children', []):
-                    if child_name in nodes_dict:
-                        nodes_dict.pop(child_name)
-            scene = next((scene for scene in scenes.values()), {'nodes': list(nodes_dict.keys())})
-        all_meshes = gltf.get('meshes', {})
-        # nodes = [gltf['nodes'][n] for n in scene['nodes']]
-        # flattened_nodes = flatten_nodes(nodes, gltf)
-        # flattened_meshes = [all_meshes[m] for node in flattened_nodes for m in node.get('meshes', [])]
-    else:
-        if not version.startswith('2.'):
-            _logger.warning('''unknown GLTF version: %s
-            ...will try loading as 2.0...
-            ''', version)
-        _init_scene_v2(gltf, uri_path, scene_name=scene_name)
         scenes = gltf.get('scenes', [])
         if scene_name and scene_name < len(scenes):
-            scene = scenes[scene_name]
+            return scenes[scene_name]
         else:
             root_nodes = set(range(len(gltf.get('nodes', []))))
             for i_node, node in enumerate(gltf.get('nodes', [])):
                 for i_child in node.get('children', []):
                     if i_child in root_nodes:
                         root_nodes.remove(i_child)
-            scene = next((scene for scene in scenes), {'nodes': list(root_nodes)})
+            return next((scene for scene in scenes), {'nodes': list(root_nodes)})
+
+    if version.startswith('1.'):
+        scene = _init_scene_v1(gltf, uri_path, scene_name=scene_name)
+        all_meshes = gltf.get('meshes', {})
+    else:
+        if not version.startswith('2.'):
+            _logger.warning('''unknown GLTF version: %s
+            ...will try loading as 2.0...
+            ''', version)
+        scene = _init_scene_v2(gltf, uri_path, scene_name=scene_name)
         all_meshes = gltf.get('meshes', [])
-        # nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
-        # flattened_nodes = flatten_nodes(nodes, gltf)
-        # flattened_meshes = chain.from_iterable([
-        #     [all_meshes[m] for m in node.get('meshes', [])] +
-        #     ([all_meshes[node['mesh']]] if 'mesh' in node else [])
-        #     for node in flattened_nodes
-        # ])
+
     nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
     flattened_nodes = flatten_nodes(nodes, gltf)
-    flattened_meshes = list(chain.from_iterable([
-        [all_meshes[m] for m in node.get('meshes', [])] +
-        ([all_meshes[node['mesh']]] if 'mesh' in node else [])
-        for node in flattened_nodes
-    ]))
+    flattened_meshes = list(chain.from_iterable([[all_meshes[m] for m in node.get('meshes', [])] +
+                                                 ([] if 'mesh' not in node else
+                                                  [all_meshes[node['mesh']]])
+                                                 for node in flattened_nodes]))
     _logger.debug('''
     number of root nodes in scene: %d
     number of nodes in scene: %d
