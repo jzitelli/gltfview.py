@@ -74,9 +74,13 @@ def view_gltf(gltf, uri_path, scene_name=None,
                                      aspectRatio=window_size[0] / max(5, window_size[1]))
     glfw.SetWindowSizeCallback(window, on_resize)
 
-    root_nodes, nodes, meshes = gltfu.init_scene(gltf, uri_path, scene_name=scene_name)
-    mesh_bounds = [gltfu.find_mesh_bounds(mesh, gltf) for mesh in meshes]
-    _logger.debug('mesh bounds:\n%s', '\n'.join(['%s: %s' % item for mb in mesh_bounds for item in mb.items()]))
+    scene = gltfu.init_scene(gltf, uri_path, scene_name=scene_name)
+    scene_bounds = gltfu.find_scene_bounds(scene, gltf)
+    _logger.debug('scene bounds:\n%s', '\n'.join(['%20s: min = %s , max = %s' % (semantic, bounds[0], bounds[1])
+                                                  for semantic, bounds in scene_bounds.items()]))
+
+    root_nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
+    nodes = gltfu.flatten_nodes(root_nodes, gltf)
 
     camera_node = next((node for node in nodes if 'camera' in node), None)
     if camera_node is not None:
@@ -90,6 +94,15 @@ def view_gltf(gltf, uri_path, scene_name=None,
     if camera_position is not None:
         _logger.info('setting camera position to %s', camera_position)
         camera_world_matrix[3, :3] = camera_position
+    camera_position = camera_world_matrix[3, :3]
+
+    if camera_node is None and 'POSITION' in scene_bounds:
+        bounds = scene_bounds['POSITION']
+        diag_length = max(np.sqrt((bounds[0]-bounds[1])**2))
+        camera_position[:] = (bounds[0] + bounds[1]) / 2
+        camera_position[2] += diag_length / np.tan(camera['perspective']['yfov']) * camera['perspective']['aspectRatio']
+        _logger.debug('camera_position = %s', camera_position)
+
     if camera_rotation is not None:
         if camera_rotation[1]:
             s, c = np.sin(camera_rotation[1]), np.cos(camera_rotation[1])

@@ -1,6 +1,7 @@
 import os.path
 import base64
 from ctypes import c_void_p
+from itertools import chain
 try:
     from types import MappingProxyType
 except ImportError:
@@ -12,10 +13,12 @@ import OpenGL.GL as gl
 import PIL.Image as Image
 
 
-_here = os.path.dirname(__file__)
-_logger = logging.getLogger(__name__)
 from gltfutils.gl_rendering import set_matrix_from_quaternion
 from gltfutils.pbrmr import setup_pbrmr_programs
+
+
+_here = os.path.dirname(__file__)
+_logger = logging.getLogger(__name__)
 
 
 CHECK_GL_ERRORS = False
@@ -327,6 +330,87 @@ def setup_vertex_array_objects(gltf, mesh):
         _setup_vertex_array_objects_for_primitive(primitive, gltf)
 
 
+def init_scene(gltf, uri_path, scene_name=None):
+    version = gltf.get('asset', {'version': '1.0'})['version']
+    generator = gltf.get('asset', {'generator': 'no generator was specified for this file'})['generator']
+    _logger.info('''
+
+  INITIALIZING FOR GLTF VERSION %s...
+    GENERATOR: %s
+
+''', version, generator)
+
+    def _init_scene_v1(gltf, uri_path, scene_name=None):
+        shader_ids = setup_shaders(gltf, uri_path)
+        setup_programs(gltf, shader_ids)
+        setup_textures(gltf, uri_path)
+        setup_buffers(gltf, uri_path)
+
+    def _init_scene_v2(gltf, uri_path, scene_name=None):
+        backport_pbrmr_materials(gltf)
+        shader_ids = setup_shaders(gltf, uri_path)
+        setup_programs(gltf, shader_ids)
+        setup_textures_v2(gltf, uri_path)
+        setup_buffers_v2(gltf, uri_path)
+
+    if version.startswith('1.'):
+        _init_scene_v1(gltf, uri_path, scene_name=scene_name)
+        scenes = gltf.get('scenes', {})
+        if scene_name and scene_name in scenes:
+            scene = scenes[scene_name]
+        else:
+            nodes_dict = dict(gltf.get('nodes', {}))
+            for node_name, node in gltf.get('nodes', {}).items():
+                for child_name in node.get('children', []):
+                    if child_name in nodes_dict:
+                        nodes_dict.pop(child_name)
+            scene = next((scene for scene in scenes.values()), {'nodes': list(nodes_dict.keys())})
+        all_meshes = gltf.get('meshes', {})
+        # nodes = [gltf['nodes'][n] for n in scene['nodes']]
+        # flattened_nodes = flatten_nodes(nodes, gltf)
+        # flattened_meshes = [all_meshes[m] for node in flattened_nodes for m in node.get('meshes', [])]
+    else:
+        if not version.startswith('2.'):
+            _logger.warning('''unknown GLTF version: %s
+            ...will try loading as 2.0...
+            ''', version)
+        _init_scene_v2(gltf, uri_path, scene_name=scene_name)
+        scenes = gltf.get('scenes', [])
+        if scene_name and scene_name < len(scenes):
+            scene = scenes[scene_name]
+        else:
+            root_nodes = set(range(len(gltf.get('nodes', []))))
+            for i_node, node in enumerate(gltf.get('nodes', [])):
+                for i_child in node.get('children', []):
+                    if i_child in root_nodes:
+                        root_nodes.remove(i_child)
+            scene = next((scene for scene in scenes), {'nodes': list(root_nodes)})
+        all_meshes = gltf.get('meshes', [])
+        # nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
+        # flattened_nodes = flatten_nodes(nodes, gltf)
+        # flattened_meshes = chain.from_iterable([
+        #     [all_meshes[m] for m in node.get('meshes', [])] +
+        #     ([all_meshes[node['mesh']]] if 'mesh' in node else [])
+        #     for node in flattened_nodes
+        # ])
+    nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
+    flattened_nodes = flatten_nodes(nodes, gltf)
+    flattened_meshes = list(chain.from_iterable([
+        [all_meshes[m] for m in node.get('meshes', [])] +
+        ([all_meshes[node['mesh']]] if 'mesh' in node else [])
+        for node in flattened_nodes
+    ]))
+    _logger.debug('''
+    number of root nodes in scene: %d
+    number of nodes in scene: %d
+    number of meshes in scene: %d''', len(nodes), len(flattened_nodes), len(flattened_meshes))
+    for mesh in flattened_meshes:
+        setup_vertex_array_objects(gltf, mesh)
+    for node in nodes:
+        update_world_matrices(node, gltf)
+    return scene
+
+
 def find_mesh_bounds(mesh, gltf):
     bounds = {}
     for primitive in mesh['primitives']:
@@ -350,75 +434,32 @@ def find_mesh_bounds(mesh, gltf):
     return bounds
 
 
-def init_scene_v1(gltf, uri_path, scene_name=None):
-    shader_ids = setup_shaders(gltf, uri_path)
-    setup_programs(gltf, shader_ids)
-    setup_textures(gltf, uri_path)
-    setup_buffers(gltf, uri_path)
-
-
-def init_scene_v2(gltf, uri_path, scene_name=None):
-    backport_pbrmr_materials(gltf)
-    shader_ids = setup_shaders(gltf, uri_path)
-    setup_programs(gltf, shader_ids)
-    setup_textures_v2(gltf, uri_path)
-    setup_buffers_v2(gltf, uri_path)
-
-
-def init_scene(gltf, uri_path, scene_name=None):
-    version = gltf.get('asset', {'version': '1.0'})['version']
-    generator = gltf.get('asset', {'generator': 'no generator was specified for this file'})['generator']
-    _logger.info('''
-
-  INITIALIZING FOR GLTF VERSION %s...
-    GENERATOR: %s
-
-''', version, generator)
-    if version.startswith('1.'):
-        init_scene_v1(gltf, uri_path, scene_name=scene_name)
-        scenes = gltf.get('scenes', {})
-        if scene_name and scene_name in scenes:
-            scene = scenes[scene_name]
-        else:
-            nodes_dict = dict(gltf.get('nodes', {}))
-            for node_name, node in gltf.get('nodes', {}).items():
-                for child_name in node.get('children', []):
-                    if child_name in nodes_dict:
-                        nodes_dict.pop(child_name)
-            scene = next((scene for scene in scenes.values()), {'nodes': list(nodes_dict.keys())})
-        all_meshes = gltf.get('meshes', {})
-        nodes = [gltf['nodes'][n] for n in scene['nodes']]
-        flattened_nodes = flatten_nodes(nodes, gltf)
-        flattened_meshes = [all_meshes[m] for node in flattened_nodes for m in node.get('meshes', [])]
-    else:
-        if not version.startswith('2.'):
-            _logger.warning('''unknown GLTF version: %s
-            ...will try loading as 2.0...
-            ''', version)
-        init_scene_v2(gltf, uri_path, scene_name=scene_name)
-        scenes = gltf.get('scenes', [])
-        if scene_name and scene_name < len(scenes):
-            scene = scenes[scene_name]
-        else:
-            root_nodes = set(range(len(gltf.get('nodes', []))))
-            for i_node, node in enumerate(gltf.get('nodes', [])):
-                for i_child in node.get('children', []):
-                    if i_child in root_nodes:
-                        root_nodes.remove(i_child)
-            scene = next((scene for scene in scenes), {'nodes': list(root_nodes)})
-        all_meshes = gltf.get('meshes', [])
-        nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
-        flattened_nodes = flatten_nodes(nodes, gltf)
-        flattened_meshes = [all_meshes[node['mesh']] for node in flattened_nodes if 'mesh' in node]
-    _logger.debug('''
-    number of root nodes in scene: %d
-    number of nodes in scene: %d
-    number of meshes in scene: %d''', len(nodes), len(flattened_nodes), len(flattened_meshes))
-    for mesh in flattened_meshes:
-        setup_vertex_array_objects(gltf, mesh)
-    for node in nodes:
-        update_world_matrices(node, gltf)
-    return nodes, flattened_nodes, flattened_meshes
+def find_scene_bounds(scene, gltf):
+    root_nodes = [gltf['nodes'][n] for n in scene.get('nodes', [])]
+    all_nodes = flatten_nodes(root_nodes, gltf)
+    scene_bounds = {}
+    all_mesh_bounds = []
+    world_matrices = []
+    for node in all_nodes:
+        if 'mesh' in node:
+            mesh_bounds = find_mesh_bounds(gltf['meshes'][node['mesh']], gltf)
+            all_mesh_bounds.append(mesh_bounds)
+            world_matrices.append(node['world_matrix'])
+        if 'meshes' in node:
+            for m in node['meshes']:
+                mesh_bounds = find_mesh_bounds(gltf['meshes'][m], gltf)
+                all_mesh_bounds.append(mesh_bounds)
+                world_matrices.append(node['world_matrix'])
+    for mesh_bounds, world_matrix in zip(all_mesh_bounds, world_matrices):
+        for semantic, bounds in mesh_bounds.items():
+            ndim = bounds.shape[1]
+            if semantic not in scene_bounds:
+                scene_bounds[semantic] = np.array([ndim*[float( 'inf')],
+                                                   ndim*[float('-inf')]], dtype=np.float32)
+            mesh_world_bounds = bounds.dot(world_matrix[:ndim,:ndim])
+            scene_bounds[semantic][0] = np.minimum(scene_bounds[semantic][0], mesh_world_bounds[0])
+            scene_bounds[semantic][1] = np.maximum(scene_bounds[semantic][1], mesh_world_bounds[1])
+    return scene_bounds
 
 
 def set_technique_state(technique_name, gltf):
@@ -696,14 +737,10 @@ def update_world_matrices(node, gltf, world_matrix=None):
 
 
 def flatten_nodes(nodes, gltf, flat=None):
-    from itertools import chain
     all_nodes = gltf.get('nodes', {})
     def find_all_descendents(node):
         children = [all_nodes[c] for c in node.get('children', [])]
         return children + list(chain.from_iterable(find_all_descendents(child) for child in children))
-        # descendents = list(children)
-        # for child in children:
-        #     descendents += find_all_descendents(child)
     return list(chain(nodes, chain.from_iterable(find_all_descendents(node) for node in nodes)))
 
 

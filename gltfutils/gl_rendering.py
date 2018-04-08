@@ -649,15 +649,17 @@ def set_matrix_from_quaternion(quat, out=None):
     return out
 
 
-def set_quaternion_from_matrix(U, out):
+def set_quaternion_from_matrix(U, out=None):
     """
     http://www.euclideanspace.com/maths/geometry/rotations/conversions/matrixToQuaternion/index.htm
 
     assumes the upper 3x3 of m is a pure rotation matrix (i.e, unscaled)
     """
+    if out is None:
+        out = np.empty(4, dtype=np.float32)
     trace = U.trace()
     if trace > 0:
-        s = 0.5 / np.sqrt( trace + 1.0 );
+        s = 0.5 / np.sqrt(trace + 1.0)
         _w = 0.25 / s
         _x = (U[2,1] - U[1,2]) * s
         _y = (U[0,2] - U[2,0]) * s
@@ -680,5 +682,5 @@ def set_quaternion_from_matrix(U, out):
         _x = (U[0,2] + U[2,0]) / s
         _y = (U[1,2] + U[2,1]) / s
         _z = 0.25 * s
-    out[:] = np.array([_x, _y, _z, _w])
+    out[:] = _x, _y, _z, _w
     return out
