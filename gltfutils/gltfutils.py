@@ -223,10 +223,7 @@ def setup_textures_v2(gltf, uri_path):
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create texture %d' % i)
         texture['id'] = texture_id
-        _logger.debug('created texture %s',
-                      i
-                      if 'name' not in texture else
-                      ('%d ("%s")' % (i, texture['name'])))
+        _logger.debug('created texture %s', i if 'name' not in texture else ('%d ("%s")' % (i, texture['name'])))
 
 
 def setup_buffers(gltf, uri_path):
@@ -332,7 +329,8 @@ def setup_vertex_array_objects(gltf, mesh):
 
 def init_scene(gltf, uri_path, scene_name=None):
     version = gltf.get('asset', {'version': '1.0'})['version']
-    generator = gltf.get('asset', {'generator': 'no generator was specified for this file'})['generator']
+    generator = gltf.get('asset', {'generator': 'no generator was specified for this file'})\
+                    .get('generator', 'no generator was specified for this file')
     _logger.info('''
 
   INITIALIZING FOR GLTF VERSION %s...

@@ -5,3 +5,9 @@
 ./test-avocado-2.0.sh --nframes 1
 ./test-barramundi-fish-1.0.sh --nframes 1
 ./test-barramundi-fish-2.0.sh --nframes 1
+./test-boombox-2.0.sh --nframes 1
+./test-boombox-2.0.sh --nframes 1
+./test-boombox-with-axes.2.0.sh --nframes 1
+./test-box-1.0.sh --nframes 1
+./test-box-2.0.sh --nframes 1
+./test-smiling-face-1.0.sh --nframes 1

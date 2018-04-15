@@ -50,7 +50,8 @@ def view_gltf(gltf, uri_path, scene_name=None,
               zfar=1000.0, znear=0.01, yfov=0.660593,
               window_title='gltfview',
               screen_capture_prefix=None,
-              display_fps=False):
+              display_fps=False,
+              move_speed=None):
     _t0 = time.time()
     if window_size is None:
         window_size = [800, 600]
@@ -98,9 +99,10 @@ def view_gltf(gltf, uri_path, scene_name=None,
 
     if camera_node is None and 'POSITION' in scene_bounds:
         bounds = scene_bounds['POSITION']
-        diag_length = max(np.sqrt((bounds[0]-bounds[1])**2))
-        camera_position[:] = (bounds[0] + bounds[1]) / 2
-        camera_position[2] += diag_length / np.tan(camera['perspective']['yfov']) * camera['perspective']['aspectRatio']
+        centroid = 0.5 * (bounds[0] + bounds[1])
+        r_max = max(np.linalg.norm(bounds[0] - centroid), np.linalg.norm(bounds[1] - centroid))
+        camera_position[:] = centroid
+        camera_position[2] += r_max / np.tan(0.5*camera['perspective']['yfov'])
         _logger.debug('camera_position = %s', camera_position)
 
     if camera_rotation is not None:
@@ -115,8 +117,14 @@ def view_gltf(gltf, uri_path, scene_name=None,
 
     on_resize(window, window_size[0], window_size[1])
 
+    if 'POSITION' in scene_bounds:
+        bounds = scene_bounds['POSITION']
+        scene_centroid = 0.5 * (bounds[0] + bounds[1])
+        move_speed = 0.125 * max(np.linalg.norm(bounds[0] - scene_centroid),
+                                 np.linalg.norm(bounds[1] - scene_centroid))
+
     process_input = setup_controls(camera_world_matrix=camera_world_matrix, window=window,
-                                   screen_capture_prefix=screen_capture_prefix)
+                                   screen_capture_prefix=screen_capture_prefix, move_speed=move_speed)
 
     text_renderer = None
     if display_fps:
