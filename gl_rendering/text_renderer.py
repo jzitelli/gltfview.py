@@ -2,9 +2,8 @@ import os.path
 import logging
 
 import numpy as np
-import OpenGL.GL as gl
 from freetype import Face, FT_LOAD_RENDER, FT_LOAD_FORCE_AUTOHINT
-#import PIL.Image as Image
+
 
 _logger = logging.getLogger(__name__)
 _here = os.path.dirname(__file__)
@@ -50,6 +49,7 @@ class TextRenderer(object):
     def init_gl(self):
         if self._gl_initialized:
             return
+        import OpenGL.GL as gl
         self._texture_unit = 4
         vs_id = gl.glCreateShader(gl.GL_VERTEX_SHADER)
         gl.glShaderSource(vs_id, self._VERT_SHADER_SRC)
@@ -104,7 +104,7 @@ class TextRenderer(object):
                         image_width, image_height, 0,
                         gl.GL_RED, gl.GL_UNSIGNED_BYTE,
                         bitmap_buffer)
-        #gl.glGenerateMipmap(gl.GL_TEXTURE_2D)
+        gl.glGenerateMipmap(gl.GL_TEXTURE_2D)
         gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
         if gl.glGetError() != gl.GL_NO_ERROR:
             raise Exception('failed to create font texture')
@@ -114,6 +114,7 @@ class TextRenderer(object):
     def draw_text(self, text,
                   color=(1.0, 1.0, 0.0, 0.0),
                   screen_position=(0.0, 0.0)):
+        import OpenGL.GL as gl
         gl.glUseProgram(self._program_id)
         gl.glActiveTexture(gl.GL_TEXTURE0+self._texture_unit)
         gl.glBindTexture(gl.GL_TEXTURE_2D, self._texture_id)
