@@ -79,10 +79,11 @@ class OpenVRRenderer(object):
         self.vr_framebuffers[0].submit(openvr.Eye_Left)
         self.vr_framebuffers[1].submit(openvr.Eye_Right)
         # mirror left eye framebuffer to screen:
-        # gl.glBlitNamedFramebuffer(self.vr_framebuffers[0].fb, 0,
-        #                           0, 0, self.vr_framebuffers[0].width, self.vr_framebuffers[0].height,
-        #                           0, 0, window_size[0], window_size[1],
-        #                           gl.GL_COLOR_BUFFER_BIT, gl.GL_NEAREST)
+        gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, self.vr_framebuffers[0].fb)
+        gl.glBindFramebuffer(gl.GL_DRAW_FRAMEBUFFER, 0)
+        gl.glBlitFramebuffer(0, 0, self.vr_framebuffers[0].width, self.vr_framebuffers[0].height,
+                             0, 0, window_size[0], window_size[1],
+                             gl.GL_COLOR_BUFFER_BIT, gl.GL_NEAREST)
         gl.glBindFramebuffer(gl.GL_FRAMEBUFFER, 0)
         self._frames_rendered += 1
         if self._poll_tracked_device_frequency and self._frames_rendered % self._poll_tracked_device_frequency == 0:
