@@ -1,7 +1,10 @@
-#!/usr/bin/bash
-filename=~/GitHub/glTF-Sample-Models/1.0/Duck/gltf/Duck.gltf
-logdir=logs
-mkdir -p $logdir
-echo 'loading file' $filename '...'
-python ../gltfview/__main__.py -v $@ $filename \
-       -s screenshots/test-duck-1.0.png 2>&1 | tee -a $logdir/test-duck-1.0.log
+#!/bin/bash
+filename=Duck.gltf
+dir=~/GitHub/glTF-Sample-Models/1.0/${filename:0:-5}/glTF
+log_dir=logs
+screenshots_dir=screenshots
+mkdir -p $log_dir
+test_name=`basename ${BASH_SOURCE[-1]}`
+echo "$test_name: loading file $dir/$filename ..."
+python ../gltfview/__main__.py -v $@ $dir/$filename \
+       -s $screenshots_dir/${test_name:0:-3}.png 2>&1 | tee -a $log_dir/${test_name:0:-3}.log
