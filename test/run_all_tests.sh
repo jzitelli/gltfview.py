@@ -10,4 +10,7 @@
 ./test-boombox-with-axes.2.0.sh --nframes 1
 ./test-box-1.0.sh --nframes 1
 ./test-box-2.0.sh --nframes 1
+./test-box-semantics-1.0.sh --nframes 1
+./test-box-textured-1.0.sh --nframes 1
+./test-box-without-indices-1.0.sh --nframes 1
 ./test-smiling-face-1.0.sh --nframes 1
