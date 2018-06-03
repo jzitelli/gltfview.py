@@ -14,3 +14,4 @@
 ./test-box-textured-1.0.sh --nframes 1
 ./test-box-without-indices-1.0.sh --nframes 1
 ./test-smiling-face-1.0.sh --nframes 1
+./test-display-fps.sh --nframes 1

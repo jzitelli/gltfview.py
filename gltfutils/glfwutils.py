@@ -137,13 +137,15 @@ def view_gltf(gltf, uri_path, scene_name=None,
     # BURNER FRAME:
     gltfu.num_draw_calls = 0
     process_input(0.0)
+    lt = glfw.GetTime()
     render(gltf, nodes, window_size,
            camera_world_matrix=camera_world_matrix,
            projection_matrix=projection_matrix)
-    if screenshot:
-        save_screen(window, screenshot)
     num_draw_calls_per_frame = gltfu.num_draw_calls
     _logger.info("NUM DRAW CALLS PER FRAME: %d", num_draw_calls_per_frame)
+    _draw_text(fps=1/(glfw.GetTime()-lt), display_fps=display_fps, text_renderer=text_renderer)
+    if screenshot:
+        save_screen(window, screenshot)
 
     _logger.info('''STARTING RENDER LOOP...''')
     if nframes:
@@ -192,10 +194,7 @@ def render_loop(process_input=None, window=None, window_size=None,
         render(gltf, nodes, window_size,
                camera_world_matrix=camera_world_matrix,
                projection_matrix=projection_matrix)
-        if text_renderer is not None and display_fps:
-            text_renderer.draw_text('%f' % (1 / dt),
-                                    color=(1.0, 0.2, 0.2, 0.0),
-                                    screen_position=(0.005, 0.005))
+        _draw_text(fps=1/dt, display_fps=display_fps, text_renderer=text_renderer)
         _nframes += 1
         glfw.SwapBuffers(window)
     return {'NUM FRAMES RENDERED': _nframes,
@@ -339,3 +338,10 @@ def save_screen(window, filepath='screenshot.png'):
     pil_image = Image.frombytes('RGB', (w, h), pixels).transpose(Image.FLIP_TOP_BOTTOM)
     pil_image.save(filepath)
     _logger.info('...saved %s', filepath)
+
+
+def _draw_text(fps=float('inf'), display_fps=False, text_renderer=None):
+    if text_renderer is not None and display_fps:
+        text_renderer.draw_text('%f' % fps,
+                                color=(1.0, 0.2, 0.2, 0.0),
+                                screen_position=(0.005, 0.005))
